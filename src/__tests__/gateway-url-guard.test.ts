@@ -198,26 +198,24 @@ describe("CwManageClient with a gateway-supplied URL", () => {
     expect(lookupMock).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    // Env mode still follows redirects (a self-hosted API may 301 to its
-    // canonical HTTPS origin). Gateway mode alone uses redirect: "manual".
-    expect(options.redirect).toBe("follow");
+    // Env mode refuses redirects too: a redirect would re-send the clientId
+    // header and, for a 307/308, the body to whatever host answered.
+    expect(options.redirect).toBe("manual");
   });
 
-  it("follows redirects in env mode even when the response is a 3xx", async () => {
-    // fetch with redirect:"follow" resolves to the final response; we only
-    // assert we asked it to follow, not that we throw on 3xx.
-    const fetchMock = vi.fn().mockResolvedValue(fakeResponse({ ok: true }, 200));
+  it("refuses a redirect in env mode and names the fix", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(fakeResponse({}, 301));
     vi.stubGlobal("fetch", fetchMock);
 
-    await new CwManageClient({
-      baseUrl: "https://10.0.0.5",
-      companyId: "acme",
-      publicKey: "pub",
-      privateKey: "priv",
-      clientId: "client-1",
-    }).get("/system/info");
-
-    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(options.redirect).toBe("follow");
+    await expect(
+      new CwManageClient({
+        baseUrl: "https://10.0.0.5",
+        companyId: "acme",
+        publicKey: "pub",
+        privateKey: "priv",
+        clientId: "client-1",
+      }).get("/system/info"),
+    ).rejects.toThrow(/redirect \(HTTP 301\).*CW_MANAGE_URL/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

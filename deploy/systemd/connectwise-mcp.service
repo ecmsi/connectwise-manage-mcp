@@ -1,0 +1,49 @@
+# Non-Docker alternative: the server as a systemd service.
+# Install: sudo cp deploy/systemd/connectwise-mcp.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now connectwise-mcp
+# Layout:  /opt/connectwise-mcp/app  (git checkout, built)   /opt/connectwise-mcp/.env (chmod 600)
+# The .env must set MCP_TRANSPORT=http, MCP_HTTP_HOST=127.0.0.1, MCP_HTTP_PORT=3101,
+# MCP_TRUST_PROXY=1 and MCP_BEARER_TOKEN; see .env.example.
+
+[Unit]
+Description=ConnectWise Manage MCP server (ECMSI fork)
+Documentation=https://github.com/ecmsi/connectwise-manage-mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=connectwise-mcp
+Group=connectwise-mcp
+WorkingDirectory=/opt/connectwise-mcp/app
+ExecStart=/usr/bin/node --env-file=/opt/connectwise-mcp/.env /opt/connectwise-mcp/app/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+# Hardening. The process reads its code and .env and writes only to stderr.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

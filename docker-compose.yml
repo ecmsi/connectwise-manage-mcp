@@ -1,33 +1,55 @@
+# ConnectWise Manage MCP server on the centralised MCP host.
+#
+# One compose project per MCP server, each published on its own loopback
+# port, with the host's shared Caddy terminating TLS in front of them all.
+# This server is 127.0.0.1:3101 (N-central is 3100). See docs/DEPLOYMENT.md.
+#
+# Everything secret lives in .env (chmod 600), loaded with env_file. Nothing
+# here holds a credential. Run from the directory that holds this file and
+# .env, for example /opt/mcp/connectwise.
 services:
-  # Gateway mode. ConnectWise credentials arrive per request on X-CW-* headers.
-  # Do not set CW_MANAGE_COMPANY_ID, CW_MANAGE_PUBLIC_KEY, CW_MANAGE_PRIVATE_KEY,
-  # CW_MANAGE_CLIENT_ID, or env_file here — that would put static vendor
-  # credentials in the container. The project .env is used only for Compose
-  # interpolation of CONDUIT_S2S_SECRET and LOG_LEVEL. For AUTH_MODE=env, pass
-  # CW_MANAGE_* on that process instead (see the README).
-  connectwise-manage-mcp:
+  connectwise-mcp:
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    image: ghcr.io/wyre-ai/connectwise-manage-mcp:latest
-    container_name: connectwise-manage-mcp-server
+    image: connectwise-manage-mcp:local
+    container_name: connectwise-mcp
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
+    env_file:
+      - .env
     environment:
-      - MCP_TRANSPORT=http
-      - MCP_HTTP_HOST=0.0.0.0
-      - MCP_HTTP_PORT=8080
-      - AUTH_MODE=gateway
-      - CONDUIT_S2S_SECRET=${CONDUIT_S2S_SECRET:?set CONDUIT_S2S_SECRET}
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-      - NODE_ENV=production
+      # Inside the container the listener binds every interface so the port
+      # mapping can reach it; the left side of `ports` keeps it on loopback.
+      MCP_TRANSPORT: http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: "8080"
+      AUTH_MODE: env
+      # Caddy sets X-Forwarded-For; without this every request looks like
+      # 172.x from the bridge and the rate limiter has one bucket.
+      MCP_TRUST_PROXY: "1"
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3101:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-
-volumes: {}

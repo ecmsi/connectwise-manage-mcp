@@ -37,12 +37,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 
 # Prune dev dependencies
-RUN npm prune --omit=dev && npm cache clean --force
+RUN npm prune --omit=dev --ignore-scripts && npm cache clean --force && chown -R root:root /app
 
-# Create logs directory
-RUN mkdir -p /app/logs && chown -R cwmanage:cwmanage /app
-
-# Switch to non-root user
+# Switch to non-root user. The image is read-only at runtime (nothing is
+# written under /app); run with --read-only and a tmpfs on /tmp.
 USER cwmanage
 
 # Expose port for HTTP transport
@@ -50,13 +48,13 @@ EXPOSE 8080
 
 # Health check against the HTTP endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1
 
-# Bind every interface inside the container. Host publish is loopback in
-# docker-compose. Startup still refuses to run without CONDUIT_S2S_SECRET
-# (a known placeholder is refused too). 0.0.0.0 is honored only because that
-# secret is set. AUTH_MODE=env is the single-tenant default; the gateway
-# Compose service overrides it and does not inject static vendor credentials.
+# Bind every interface inside the container; host exposure is the `ports`
+# entry in compose (loopback). Startup refuses to run unless MCP_BEARER_TOKEN,
+# CONDUIT_S2S_SECRET or OAuth is configured, so 0.0.0.0 is never reachable
+# unauthenticated. CW_WRITE_MODE defaults to read-only in the code; set it to
+# write in .env deliberately.
 ENV NODE_ENV=production
 ENV LOG_LEVEL=info
 ENV MCP_TRANSPORT=http
@@ -64,22 +62,16 @@ ENV MCP_HTTP_PORT=8080
 ENV MCP_HTTP_HOST=0.0.0.0
 ENV AUTH_MODE=env
 
-# Define volume for logs
-VOLUME ["/app/logs"]
-
 # Start the application
 CMD ["node", "dist/index.js"]
 
 # Labels for metadata
-LABEL maintainer="engineering@wyre.ai"
 LABEL version="${VERSION}"
-LABEL description="ConnectWise Manage MCP Server - Model Context Protocol server for ConnectWise PSA"
+LABEL description="ConnectWise Manage MCP Server (ECMSI fork) - Model Context Protocol server for ConnectWise PSA"
 LABEL org.opencontainers.image.title="connectwise-manage-mcp"
 LABEL org.opencontainers.image.description="Model Context Protocol server for ConnectWise Manage (PSA) integration"
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
-LABEL org.opencontainers.image.source="https://github.com/WYRE-AI/connectwise-manage-mcp"
-LABEL org.opencontainers.image.vendor="Wyre Technology"
+LABEL org.opencontainers.image.source="https://github.com/ecmsi/connectwise-manage-mcp"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL io.modelcontextprotocol.server.name="io.github.WYRE-AI/connectwise-manage-mcp"

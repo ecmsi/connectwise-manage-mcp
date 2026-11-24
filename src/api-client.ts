@@ -59,6 +59,13 @@ export function getConfig(): CwManageConfig | null {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 
+const RELAXED_TLS_WARNING =
+  "SECURITY WARNING: CW_MANAGE_REJECT_UNAUTHORIZED=false disables TLS certificate verification " +
+  "for every ConnectWise request this process makes, so a man-in-the-middle could read the API keys. " +
+  "For a private CA, unset it and point NODE_EXTRA_CA_CERTS at the CA bundle instead.";
+
+let relaxedTlsWarned = false;
+
 /**
  * Error thrown for a non-2xx Manage response.
  *
@@ -141,10 +148,12 @@ export class CwManageClient {
     // dispatcher: passing the standalone `undici` package's Agent to Node's
     // global fetch breaks every request when the bundled undici version is
     // incompatible with the one embedded in the running Node runtime.
-    this.dispatcher =
-      process.env.CW_MANAGE_REJECT_UNAUTHORIZED === "false"
-        ? new Agent({ connect: { rejectUnauthorized: false } })
-        : undefined;
+    const relaxedTls = process.env.CW_MANAGE_REJECT_UNAUTHORIZED === "false";
+    if (relaxedTls && !relaxedTlsWarned) {
+      relaxedTlsWarned = true;
+      console.error(RELAXED_TLS_WARNING);
+    }
+    this.dispatcher = relaxedTls ? new Agent({ connect: { rejectUnauthorized: false } }) : undefined;
   }
 
   /**
@@ -196,14 +205,15 @@ export class CwManageClient {
       }
     }
 
-    // Redirect blocking is gateway-only: env-mode CW_MANAGE_URL may legitimately
-    // 301/302 to a canonical HTTPS origin on a self-hosted server. Cloudflare
-    // Workers reject redirect: "error", so gateway mode uses "manual" + a throw.
-    const blockRedirects = this.untrustedBaseUrl !== undefined;
+    // Never follow a redirect, in any mode. An API client has no reason to,
+    // and following one would re-send the `clientId` header (fetch strips only
+    // Authorization on a cross-origin redirect) and, for a 307/308, the request
+    // body. A self-hosted CW_MANAGE_URL must therefore be the canonical origin.
+    // Cloudflare Workers reject redirect: "error", so this uses "manual" + a throw.
     const fetchOptions: RequestInit = {
       method,
       headers: this.defaultHeaders(),
-      redirect: blockRedirects ? "manual" : "follow",
+      redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     };
 
@@ -229,13 +239,10 @@ export class CwManageClient {
 
     const response = await fetch(url.toString(), fetchOptions);
 
-    if (
-      blockRedirects &&
-      response.status >= 300 &&
-      response.status < 400
-    ) {
+    if (response.status >= 300 && response.status < 400) {
       throw new Error(
-        `ConnectWise API ${method} ${path} returned a redirect (HTTP ${response.status}); refusing to follow it.`,
+        `ConnectWise API ${method} ${path} returned a redirect (HTTP ${response.status}); refusing to follow it. ` +
+          "Set CW_MANAGE_URL to the canonical origin the server redirects to.",
       );
     }
 

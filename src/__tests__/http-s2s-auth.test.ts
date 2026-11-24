@@ -476,9 +476,9 @@ describe("gateway /mcp auth", () => {
       path: "/health",
     });
     expect(response.status).toBe(200);
-    const body = JSON.parse(response.body) as { status?: string; authMode?: string };
-    expect(body.status).toBe("ok");
-    expect(body.authMode).toBe("gateway");
+    const body = JSON.parse(response.body) as Record<string, unknown>;
+    // Unauthenticated, so it says nothing about how the server is configured.
+    expect(body).toEqual({ status: "ok" });
     assertNoSecrets(response.body);
     expect(getConfigCalls.n).toBe(0);
     expect(constructed).toEqual([]);

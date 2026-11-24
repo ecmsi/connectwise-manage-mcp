@@ -1,0 +1,19 @@
+# /etc/caddy/Caddyfile on the centralised MCP host.
+#
+# Caddy is the only thing listening on 80/443. Each MCP server gets a site
+# file under /etc/caddy/sites/ that proxies to that server's loopback port.
+#
+#   Server              Site file                         Upstream
+#   N-central           ncentral-mcp.caddy                127.0.0.1:3100
+#   ConnectWise Manage  connectwise-mcp.caddy             127.0.0.1:3101
+#   (next one)          <name>-mcp.caddy                  127.0.0.1:3102
+#
+# Adding a server never touches another server's file.
+
+{
+	email ops@example.com
+	# For names that are not publicly resolvable, point Caddy at the internal
+	# CA instead, or supply certificates with `tls` in each site block.
+}
+
+import /etc/caddy/sites/*.caddy

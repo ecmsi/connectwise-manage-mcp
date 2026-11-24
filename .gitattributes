@@ -1,0 +1,5 @@
+# Normalise line endings so checkouts on Windows and Linux hash the same.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

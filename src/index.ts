@@ -15,18 +15,33 @@
  *   CW_MANAGE_URL               - API base URL (default: https://api-na.myconnectwise.net)
  *                                  Cloud: api-na.myconnectwise.net, api-eu.myconnectwise.net, api-au.myconnectwise.net
  *                                  Self-hosted: https://cwm.yourcompany.com (or with full path)
- *   CW_MANAGE_REJECT_UNAUTHORIZED - Set to "false" for self-signed certs (default: "true")
+ *   CW_MANAGE_REJECT_UNAUTHORIZED - Set to "false" for self-signed certs (default: "true").
+ *                                 Logs a security warning; prefer NODE_EXTRA_CA_CERTS.
+ *   CW_WRITE_MODE               - "read-only" (default) registers only get/search/list/test
+ *                                 tools; "write" registers the full catalog.
  *   MCP_TRANSPORT               - "stdio" (default) or "http"
  *   MCP_HTTP_PORT               - HTTP port (default: 8080)
  *   MCP_HTTP_HOST               - HTTP bind address. Defaults to 127.0.0.1.
- *                                 Honored only when CONDUIT_S2S_SECRET is set.
- *                                 Without a secret, MCP_ALLOW_INSECURE_DEV=1
- *                                 forces 127.0.0.1.
- *   AUTH_MODE                   - "env" (default) or "gateway" for header-based auth
- *   CONDUIT_S2S_SECRET          - Required to start HTTP. Empty and known
- *                                 placeholders refuse to start.
- *   MCP_ALLOW_INSECURE_DEV      - Set to "1" to start HTTP without a secret.
+ *                                 Honored only when an authentication
+ *                                 mechanism is configured. Without one,
+ *                                 MCP_ALLOW_INSECURE_DEV=1 forces 127.0.0.1.
+ *   AUTH_MODE                   - "env" (default) or "gateway" for header-based auth.
+ *                                 Gateway mode requires CONDUIT_S2S_SECRET.
+ *   CONDUIT_S2S_SECRET          - HMAC secret for X-Gateway-S2S (WYRE gateway).
+ *   MCP_BEARER_TOKEN            - Static bearer token for direct clients
+ *                                 (Claude Code, Claude Desktop, claude.ai).
+ *                                 At least 32 characters; openssl rand -hex 32.
+ *   MCP_ALLOW_INSECURE_DEV      - Set to "1" to start HTTP with no auth configured.
  *                                 Listens on 127.0.0.1 only. Local development.
+ *   MCP_RATE_LIMIT_PER_MINUTE   - Per-client request cap on every path except
+ *                                 /health (default 120; 0 disables).
+ *   MCP_TRUST_PROXY             - Set to "1" when a reverse proxy sets
+ *                                 X-Forwarded-For, so the rate limiter sees the
+ *                                 real client address.
+ *
+ * HTTP refuses to start unless at least one of CONDUIT_S2S_SECRET,
+ * MCP_BEARER_TOKEN or MCP_OAUTH_ENABLED=true is configured, or
+ * MCP_ALLOW_INSECURE_DEV=1. Every configured mechanism is enforced on /mcp.
  *
  * Entra ID OAuth 2.1 (optional — set MCP_OAUTH_ENABLED=true to activate):
  *   MCP_OAUTH_ENABLED           - Enable Entra ID auth middleware (default: false)
@@ -35,7 +50,7 @@
  *   AZURE_CLIENT_ID             - App registration client ID
  *   AZURE_AUDIENCE              - Token audience, typically api://<AZURE_CLIENT_ID>
  *   AZURE_REQUIRED_ROLE         - App role claim required on every request (default: CWM.Access)
- *   MCP_BEARER_TOKEN            - Static bearer token for Claude Code CLI / Claude Desktop
+ *   MCP_BEARER_TOKEN            - With OAuth on, the static fallback inside that flow
  */
 
 import {
@@ -64,40 +79,22 @@ import {
 } from "./mcp-server.js";
 import { verifyS2sHeader, S2S_HEADER } from "./s2s-verify.js";
 import { isValidHostHeader, parseRequestTarget } from "./request-target.js";
-
-/**
- * Public example values. A copied placeholder must not verify as a real
- * secret, and MCP_ALLOW_INSECURE_DEV does not bypass this list.
- */
-const KNOWN_PLACEHOLDER_SECRETS = new Set([
-  "replace-with-a-real-secret",
-  "your-s2s-secret",
-  "your-secret",
-  "changeme",
-  "change-me",
-  "placeholder",
-  "secret",
-  "example",
-  "replace-me",
-  "s2s-secret",
-]);
+import {
+  auditLog,
+  createRateLimiter,
+  describeHttpAuth,
+  getClientIp,
+  parseRateLimitPerMinute,
+  resolveHttpAuthConfig,
+  verifyBearerHeader,
+  type HttpAuthConfig,
+} from "./http-auth.js";
+import { resolveWriteMode, type WriteMode } from "./tool-policy.js";
 
 const LOOPBACK_HOST = "127.0.0.1";
 
-const MISSING_S2S_SECRET_ERROR =
-  "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is empty. " +
-  "An empty secret would accept unauthenticated /mcp requests (CWE-306). " +
-  "Set CONDUIT_S2S_SECRET to the gateway-provisioned service-to-service secret, " +
-  "or set MCP_ALLOW_INSECURE_DEV=1 to bypass this check for local development only.";
-
-const PLACEHOLDER_S2S_SECRET_ERROR =
-  "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is a known placeholder. " +
-  "Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value.";
-
-const INSECURE_DEV_WARNING =
-  "SECURITY WARNING: CONDUIT_S2S_SECRET is empty and MCP_ALLOW_INSECURE_DEV=1. " +
-  "HTTP /mcp is starting WITHOUT service-to-service authentication and listens on 127.0.0.1 only. " +
-  "Do not use MCP_ALLOW_INSECURE_DEV outside local development.";
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_CLIENTS = 10_000;
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -117,35 +114,28 @@ function isLoopbackHost(host: string): boolean {
 }
 
 /**
- * Secret for X-Gateway-S2S on /mcp. Read at HTTP startup, not module load.
- * Empty fails closed unless MCP_ALLOW_INSECURE_DEV=1. A known placeholder
- * always fails closed. The secret value is never written to logs.
+ * Decide the /mcp authentication checks from the environment, or refuse to
+ * start. Read at HTTP startup, not module load. No secret value is logged.
  */
-function resolveHttpS2sSecret(): string {
-  const secret = (process.env.CONDUIT_S2S_SECRET ?? "").trim();
-  if (KNOWN_PLACEHOLDER_SECRETS.has(secret.toLowerCase())) {
-    console.error(PLACEHOLDER_S2S_SECRET_ERROR);
+function resolveHttpAuthOrExit(oauthEnabled: boolean, gatewayMode: boolean): HttpAuthConfig {
+  const resolution = resolveHttpAuthConfig(process.env, { oauthEnabled, gatewayMode });
+  if (!resolution.ok) {
+    console.error(resolution.error);
     process.exit(1);
   }
-  if (secret) return secret;
-
-  if (process.env.MCP_ALLOW_INSECURE_DEV === "1") {
-    console.error(INSECURE_DEV_WARNING);
-    return "";
-  }
-
-  console.error(MISSING_S2S_SECRET_ERROR);
-  process.exit(1);
+  for (const warning of resolution.warnings) console.error(warning);
+  return resolution.config;
 }
 
 /**
- * No secret (insecure-dev bypass only): always 127.0.0.1, including when
- * MCP_HTTP_HOST is a wider address such as 0.0.0.0.
- * A configured secret honors MCP_HTTP_HOST. Unset defaults to 127.0.0.1.
+ * With no authentication configured (insecure-dev bypass only): always
+ * 127.0.0.1, including when MCP_HTTP_HOST is a wider address such as 0.0.0.0.
+ * With authentication configured, MCP_HTTP_HOST is honored; unset defaults
+ * to 127.0.0.1.
  */
-function resolveListenHost(s2sSecret: string): string {
+function resolveListenHost(auth: HttpAuthConfig): string {
   const configured = (process.env.MCP_HTTP_HOST ?? "").trim();
-  if (s2sSecret) return configured || LOOPBACK_HOST;
+  if (!auth.insecureDev) return configured || LOOPBACK_HOST;
   if (configured && !isLoopbackHost(configured)) {
     console.error(
       `WARNING: MCP_HTTP_HOST=${configured} is not a loopback address. ` +
@@ -156,15 +146,33 @@ function resolveListenHost(s2sSecret: string): string {
   return LOOPBACK_HOST;
 }
 
+function resolveWriteModeOrExit(): WriteMode {
+  try {
+    return resolveWriteMode(process.env.CW_WRITE_MODE);
+  } catch (err) {
+    console.error(`Refusing to start: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
+function sendJson(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
+  res.writeHead(status, { "Content-Type": "application/json", ...headers });
+  res.end(JSON.stringify(body));
+}
+
 // ---------------------------------------------------------------------------
 // Transport: stdio
 // ---------------------------------------------------------------------------
 
 async function startStdioTransport(): Promise<void> {
-  const server = createMcpServer();
+  const writeMode = resolveWriteModeOrExit();
+  const server = createMcpServer(undefined, { writeMode });
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("ConnectWise Manage MCP server running on stdio");
+  console.error(
+    `ConnectWise Manage MCP server running on stdio (write mode: ${writeMode}, ` +
+      `${server.registeredTools.length} tools registered, ${server.skippedTools.length} write tools withheld)`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -174,19 +182,38 @@ async function startStdioTransport(): Promise<void> {
 let httpServer: HttpServer | undefined;
 
 export async function startHttpTransport(): Promise<HttpServer> {
-  const s2sSecret = resolveHttpS2sSecret();
   const port = parseInt(process.env.MCP_HTTP_PORT || "8080", 10);
-  // Loopback unless the operator opts into a wider bind. A wider bind is
-  // honored only when CONDUIT_S2S_SECRET is set. The insecure-dev bypass
-  // always listens on 127.0.0.1, including when the image sets 0.0.0.0.
-  const host = resolveListenHost(s2sSecret);
   const authMode = process.env.AUTH_MODE || "env";
   const isGatewayMode = authMode === "gateway";
+  const oauthEnabled = process.env.MCP_OAUTH_ENABLED === "true";
+  const auth = resolveHttpAuthOrExit(oauthEnabled, isGatewayMode);
+  const host = resolveListenHost(auth);
+  const writeMode = resolveWriteModeOrExit();
+  const trustProxy = process.env.MCP_TRUST_PROXY === "1";
+
+  let rateLimitPerMinute: number;
+  try {
+    rateLimitPerMinute = parseRateLimitPerMinute(process.env.MCP_RATE_LIMIT_PER_MINUTE);
+  } catch (err) {
+    console.error(`Refusing to start: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+  const rateLimiter =
+    rateLimitPerMinute > 0
+      ? createRateLimiter({
+          windowMs: RATE_LIMIT_WINDOW_MS,
+          maximum: rateLimitPerMinute,
+          capacity: RATE_LIMIT_MAX_CLIENTS,
+        })
+      : null;
+  const cleanupTimer = rateLimiter
+    ? setInterval(() => rateLimiter.cleanup(), RATE_LIMIT_WINDOW_MS)
+    : null;
+  cleanupTimer?.unref();
 
   // ---------------------------------------------------------------------------
   // Entra ID auth setup (optional)
   // ---------------------------------------------------------------------------
-  const oauthEnabled = process.env.MCP_OAUTH_ENABLED === "true";
   let entraConfig: ReturnType<typeof getEntraConfig> | null = null;
   let jwksClient: ReturnType<typeof createJwksClient> | null = null;
 
@@ -209,8 +236,25 @@ export async function startHttpTransport(): Promise<HttpServer> {
       ? parseRequestTarget(req.url)
       : null;
     if (!url) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "invalid_request" }));
+      sendJson(res, 400, { error: "invalid_request" });
+      return;
+    }
+
+    // Health endpoint: unauthenticated, so it says nothing about configuration.
+    if (url.pathname === "/health" || url.pathname === "/healthz") {
+      sendJson(res, 200, { status: "ok" });
+      return;
+    }
+
+    const clientIp = getClientIp(req, trustProxy);
+    if (rateLimiter && !rateLimiter.allow(clientIp)) {
+      auditLog("http_rate_limited", { ip: clientIp, path: url.pathname });
+      sendJson(
+        res,
+        429,
+        { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests" }, id: null },
+        { "Retry-After": "60" },
+      );
       return;
     }
 
@@ -236,11 +280,8 @@ export async function startHttpTransport(): Promise<HttpServer> {
 
       if (url.pathname === "/register" && req.method === "POST") {
         handleRegister(req, res, entraConfig).catch((err) => {
-          console.error("[auth] /register error:", err);
-          if (!res.headersSent) {
-            res.writeHead(500, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "internal_error" }));
-          }
+          console.error("[auth] /register error:", err instanceof Error ? err.name : "unknown");
+          if (!res.headersSent) sendJson(res, 500, { error: "internal_error" });
         });
         return;
       }
@@ -252,55 +293,44 @@ export async function startHttpTransport(): Promise<HttpServer> {
 
       if (url.pathname === "/token" && req.method === "POST") {
         handleToken(req, res, entraConfig).catch((err) => {
-          console.error("[auth] /token error:", err);
-          if (!res.headersSent) {
-            res.writeHead(502, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ error: "token_proxy_error" }));
-          }
+          console.error("[auth] /token error:", err instanceof Error ? err.name : "unknown");
+          if (!res.headersSent) sendJson(res, 502, { error: "token_proxy_error" });
         });
         return;
       }
     }
 
-    // Health endpoint
-    if (url.pathname === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(
-        JSON.stringify({
-          status: "ok",
-          transport: "http",
-          authMode: isGatewayMode ? "gateway" : "env",
-          oauthEnabled,
-          timestamp: new Date().toISOString(),
-        }),
-      );
-      return;
-    }
-
     // MCP endpoint - stateless: fresh server + transport per request
     if (url.pathname === "/mcp") {
-      // Empty s2sSecret is only reachable when MCP_ALLOW_INSECURE_DEV=1;
-      // startup refuses otherwise. A configured secret is always enforced,
-      // before any credential extraction.
-      if (s2sSecret && !verifyS2sHeader(headerValue(req.headers[S2S_HEADER]), s2sSecret)) {
-        res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            error: "Missing or invalid X-Gateway-S2S header: this endpoint only accepts requests signed by the gateway.",
-          })
+      // Every configured mechanism is enforced before any credential
+      // extraction. An empty config is only reachable under
+      // MCP_ALLOW_INSECURE_DEV=1; startup refuses otherwise.
+      if (auth.s2sSecret && !verifyS2sHeader(headerValue(req.headers[S2S_HEADER]), auth.s2sSecret)) {
+        auditLog("http_auth_failed", { ip: clientIp, reason: "s2s" });
+        sendJson(res, 401, {
+          error: "Missing or invalid X-Gateway-S2S header: this endpoint only accepts requests signed by the gateway.",
+        });
+        return;
+      }
+
+      // With OAuth on, the static token is checked inside that flow below.
+      if (auth.bearerToken && !oauthEnabled && !verifyBearerHeader(req.headers.authorization, auth.bearerToken)) {
+        auditLog("http_auth_failed", { ip: clientIp, reason: "bearer" });
+        sendJson(
+          res,
+          401,
+          { error: "unauthorized", message: "Bearer token required" },
+          { "WWW-Authenticate": 'Bearer realm="connectwise-manage-mcp"' },
         );
         return;
       }
 
       if (req.method !== "POST") {
-        res.writeHead(405, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            error: { code: -32000, message: "Method not allowed" },
-            id: null,
-          }),
-        );
+        sendJson(res, 405, {
+          jsonrpc: "2.0",
+          error: { code: -32000, message: "Method not allowed" },
+          id: null,
+        });
         return;
       }
 
@@ -312,15 +342,11 @@ export async function startHttpTransport(): Promise<HttpServer> {
           const authHeader = req.headers.authorization;
 
           if (!authHeader?.startsWith("Bearer ")) {
-            res.writeHead(401, {
-              "Content-Type": "application/json",
-              "WWW-Authenticate": `Bearer resource_metadata="${entraConfig.serverUrl}/.well-known/oauth-protected-resource"`,
-            });
-            res.end(
-              JSON.stringify({
-                error: "unauthorized",
-                message: "Bearer token required",
-              }),
+            sendJson(
+              res,
+              401,
+              { error: "unauthorized", message: "Bearer token required" },
+              { "WWW-Authenticate": `Bearer resource_metadata="${entraConfig.serverUrl}/.well-known/oauth-protected-resource"` },
             );
             return;
           }
@@ -351,12 +377,11 @@ export async function startHttpTransport(): Promise<HttpServer> {
             );
           } catch (err) {
             if (err instanceof AuthError) {
-              res.writeHead(err.statusCode, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ error: "auth_failed", message: err.message }));
+              auditLog("http_auth_failed", { ip: clientIp, reason: "oauth", status: err.statusCode });
+              sendJson(res, err.statusCode, { error: "auth_failed", message: err.message });
             } else {
-              console.error("[auth] Unexpected validation error:", err);
-              res.writeHead(500, { "Content-Type": "application/json" });
-              res.end(JSON.stringify({ error: "internal_error" }));
+              console.error("[auth] Unexpected validation error:", err instanceof Error ? err.name : "unknown");
+              sendJson(res, 500, { error: "internal_error" });
             }
             return;
           }
@@ -376,20 +401,17 @@ export async function startHttpTransport(): Promise<HttpServer> {
             headerValue(req.headers[name]),
           );
           if (error) {
-            res.writeHead(401, { "Content-Type": "application/json" });
-            res.end(
-              JSON.stringify({
-                error: "Missing credentials",
-                message:
-                  "Gateway mode requires X-CW-Company-Id, X-CW-Public-Key, X-CW-Private-Key, and X-CW-Client-Id headers",
-                required: [
-                  "X-CW-Company-Id",
-                  "X-CW-Public-Key",
-                  "X-CW-Private-Key",
-                  "X-CW-Client-Id",
-                ],
-              }),
-            );
+            sendJson(res, 401, {
+              error: "Missing credentials",
+              message:
+                "Gateway mode requires X-CW-Company-Id, X-CW-Public-Key, X-CW-Private-Key, and X-CW-Client-Id headers",
+              required: [
+                "X-CW-Company-Id",
+                "X-CW-Public-Key",
+                "X-CW-Private-Key",
+                "X-CW-Client-Id",
+              ],
+            });
             return;
           }
           configOverride = config;
@@ -398,7 +420,7 @@ export async function startHttpTransport(): Promise<HttpServer> {
         // ------------------------------------------------------------------
         // MCP handler
         // ------------------------------------------------------------------
-        const server = createMcpServer(configOverride);
+        const server = createMcpServer(configOverride, { writeMode });
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
           enableJsonResponse: true,
@@ -414,16 +436,13 @@ export async function startHttpTransport(): Promise<HttpServer> {
       };
 
       handleMcp().catch((err) => {
-        console.error("MCP transport error:", err);
+        console.error("MCP transport error:", err instanceof Error ? err.name : "unknown");
         if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              error: { code: -32603, message: "Internal error" },
-              id: null,
-            }),
-          );
+          sendJson(res, 500, {
+            jsonrpc: "2.0",
+            error: { code: -32603, message: "Internal error" },
+            id: null,
+          });
         }
       });
 
@@ -431,10 +450,11 @@ export async function startHttpTransport(): Promise<HttpServer> {
     }
 
     // 404 for everything else
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(
-      JSON.stringify({ error: "Not found", endpoints: ["/mcp", "/health"] }),
-    );
+    sendJson(res, 404, { error: "Not found", endpoints: ["/mcp", "/health"] });
+  });
+
+  httpServer.on("close", () => {
+    if (cleanupTimer) clearInterval(cleanupTimer);
   });
 
   await new Promise<void>((resolve) => {
@@ -445,6 +465,11 @@ export async function startHttpTransport(): Promise<HttpServer> {
       console.error(`Health check available at http://${host}:${port}/health`);
       console.error(
         `Authentication mode: ${isGatewayMode ? "gateway (header-based)" : "env (environment variables)"}`,
+      );
+      console.error(`HTTP client authentication: ${describeHttpAuth(auth)}`);
+      console.error(
+        `Write mode: ${writeMode}; rate limit: ${rateLimitPerMinute > 0 ? `${rateLimitPerMinute}/min per client` : "off"}` +
+          `${trustProxy ? " (X-Forwarded-For trusted)" : ""}`,
       );
       resolve();
     });
@@ -491,5 +516,8 @@ async function main(): Promise<void> {
 // Vitest imports this module to call startHttpTransport. Skip the CLI
 // entrypoint there. `node dist/index.js` still starts stdio or HTTP.
 if (process.env.VITEST !== "true") {
-  main().catch(console.error);
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
 }

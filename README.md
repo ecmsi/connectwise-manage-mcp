@@ -2,6 +2,29 @@
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
+[![CI](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml)
+
+> **ECMSI fork.** This is [ecmsi/connectwise-manage-mcp](https://github.com/ecmsi/connectwise-manage-mcp),
+> a hardened fork of [WYRE-AI/connectwise-manage-mcp](https://github.com/WYRE-AI/connectwise-manage-mcp)
+> for ECMSI's centralised MCP host. Compared with upstream it adds a standalone bearer-token
+> mechanism for direct clients, a read-only default (`CW_WRITE_MODE`), per-call audit logging, rate
+> limiting, redirect refusal in every mode, a clean production dependency tree and a deployment
+> layout for one Caddy fronting many MCP containers. The full list and the reasons are in
+> [docs/FORK-CHANGES.md](docs/FORK-CHANGES.md); the host procedure is in
+> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The rest of this README is upstream's, and still
+> accurate for tool behaviour.
+>
+> Fork essentials:
+>
+> | Variable | Fork behaviour |
+> |---|---|
+> | `MCP_BEARER_TOKEN` | Static token every direct client sends as `Authorization: Bearer`. Enough on its own to start HTTP; 32 characters minimum (`openssl rand -hex 32`). |
+> | `CW_WRITE_MODE` | `read-only` (default): the 63 get/search/list/test tools. `write`: all 89. |
+> | `MCP_RATE_LIMIT_PER_MINUTE` | Per-client cap on every path except `/health`. Default 120; 0 disables. |
+> | `MCP_TRUST_PROXY` | `1` behind Caddy so the limiter sees the real client address. |
+> | `CONDUIT_S2S_SECRET` | Only for the WYRE gateway. Not needed on the ECMSI host. |
+>
+> Local gate: `npm run check` (lint, typecheck, build, tests, production audit).
 
 **Let your AI assistant work directly with ConnectWise Manage.** Search tickets, log time, look up companies and contacts, manage projects — through natural conversation instead of clicking through the CWM interface.
 
