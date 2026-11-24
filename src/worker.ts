@@ -39,6 +39,7 @@ import {
   buildConfig,
   type CwManageConfig,
 } from "./mcp-server.js";
+import { resolveWriteMode } from "./tool-policy.js";
 
 export interface Env {
   CW_MANAGE_COMPANY_ID?: string;
@@ -50,6 +51,8 @@ export interface Env {
   LOG_LEVEL?: string;
   /** Required in env mode when CW_MANAGE_* secrets are set. */
   MCP_BEARER_TOKEN?: string;
+  /** "read-only" (default) or "write"; see tool-policy.ts. */
+  CW_WRITE_MODE?: string;
 }
 
 /** Constant-time string compare (no early exit on the first differing byte). */
@@ -176,8 +179,17 @@ export default {
         configOverride = config;
       }
 
+      // The Worker binding wins; when it is unset, createMcpServer applies
+      // its own default (CW_WRITE_MODE from process.env, else read-only).
+      let writeMode;
+      try {
+        writeMode = env.CW_WRITE_MODE !== undefined ? resolveWriteMode(env.CW_WRITE_MODE) : undefined;
+      } catch (err) {
+        return json({ error: "Not configured", message: err instanceof Error ? err.message : String(err) }, 503);
+      }
+
       // Fresh server + transport per request (stateless).
-      const server = createMcpServer(configOverride);
+      const server = createMcpServer(configOverride, { writeMode });
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,

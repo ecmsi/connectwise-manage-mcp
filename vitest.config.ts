@@ -12,5 +12,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     exclude: ["**/node_modules/**", "**/dist/**"],
+    // The server defaults to CW_WRITE_MODE=read-only, which leaves every
+    // create/update/delete tool unregistered. The contract tests exercise
+    // those tools, so the suite runs in write mode; tool-policy.test.ts and
+    // the HTTP tests set the mode explicitly where it is what is under test.
+    env: {
+      CW_WRITE_MODE: "write",
+    },
   },
 });

@@ -15,9 +15,14 @@
  * so credential-requiring calls fail with a clear, graceful message.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getConfig, CwManageClient, type CwManageConfig } from "./api-client.js";
 import { registerCardResources } from "./resources.js";
+import {
+  PolicyMcpServer,
+  resolveWriteMode,
+  type ToolAuditHook,
+  type WriteMode,
+} from "./tool-policy.js";
 import { registerTicketTools } from "./tools/tickets.js";
 import { registerCompanyTools } from "./tools/companies.js";
 import { registerContactTools } from "./tools/contacts.js";
@@ -36,7 +41,24 @@ import { registerOpportunityTools } from "./tools/opportunities.js";
 import { registerFinanceProcurementTools } from "./tools/finance-procurement.js";
 import { registerProjectProcurementTools } from "./tools/project-procurement.js";
 
-export type { CwManageConfig };
+export type { CwManageConfig, WriteMode };
+
+export interface CreateMcpServerOptions {
+  /**
+   * Which tools to register. Defaults to CW_WRITE_MODE from the environment,
+   * and to read-only when that is unset. Transports resolve it once at
+   * startup and pass it in, so a bad value fails there rather than on every
+   * request.
+   */
+  writeMode?: WriteMode;
+  /** Per-call audit sink. Omit for the stderr default; `null` turns it off. */
+  audit?: ToolAuditHook | null;
+}
+
+function writeModeFromEnv(): WriteMode {
+  const value = typeof process !== "undefined" && process.env ? process.env.CW_WRITE_MODE : undefined;
+  return resolveWriteMode(value);
+}
 
 /**
  * Build a validated CwManageConfig from raw values.
@@ -102,9 +124,13 @@ export function resolveGatewayConfig(
  *
  * @param configOverride - Optional config (gateway mode / Workers headers).
  *   When provided, the client is built from it instead of reading process.env.
+ * @param options - Write mode and audit sink; see CreateMcpServerOptions.
  */
-export function createMcpServer(configOverride?: CwManageConfig): McpServer {
-  const server = new McpServer(
+export function createMcpServer(
+  configOverride?: CwManageConfig,
+  options: CreateMcpServerOptions = {},
+): PolicyMcpServer {
+  const server = new PolicyMcpServer(
     {
       name: "connectwise-manage-mcp",
       version: "1.4.0",
@@ -115,7 +141,11 @@ export function createMcpServer(configOverride?: CwManageConfig): McpServer {
           "io.modelcontextprotocol/ui": {},
         },
       },
-    }
+    },
+    {
+      writeMode: options.writeMode ?? writeModeFromEnv(),
+      audit: options.audit,
+    },
   );
 
   // MCP Apps (SEP-1865): the ui:// ticket card is static embedded HTML, so it
