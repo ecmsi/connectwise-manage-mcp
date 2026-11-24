@@ -1,4 +1,38 @@
-## [Unreleased]
+## [1.4.0-ecmsi.1] - 2026-11-24 (ECMSI fork)
+
+Based on upstream `bb2a907`. See [docs/FORK-CHANGES.md](docs/FORK-CHANGES.md) for the reasoning
+behind each item and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the centralised-host layout.
+
+### Security
+
+- **`MCP_BEARER_TOKEN` authenticates direct clients on its own.** HTTP refuses to start unless
+  `CONDUIT_S2S_SECRET`, `MCP_BEARER_TOKEN` or `MCP_OAUTH_ENABLED=true` is configured (or
+  `MCP_ALLOW_INSECURE_DEV=1`, loopback only). Every configured mechanism is enforced on `/mcp`. Tokens
+  shorter than 32 characters or on the placeholder list are refused at startup. `AUTH_MODE=gateway`
+  still requires the S2S secret.
+- **`CW_WRITE_MODE=read-only` is the default** and registers only the 63 `get`/`search`/`list`/`test`
+  tools. `write` registers all 89. Withheld tools are not listed and cannot be called. A test scans
+  every tool source and fails if a read-named tool issues anything but GET.
+- **Per-call audit line** on stderr: tool name, outcome, duration. Never arguments or results.
+  Authentication failures and rate-limit hits are logged with the client address and reason.
+- **Rate limiting** per client address, `MCP_RATE_LIMIT_PER_MINUTE` (default 120, 0 disables).
+  `MCP_TRUST_PROXY=1` reads `X-Forwarded-For`.
+- **`/health` returns only `{"status":"ok"}`**; `/healthz` is an alias.
+- **Redirects are refused in env mode too.** `CW_MANAGE_URL` must be the canonical origin.
+- **`CW_MANAGE_REJECT_UNAUTHORIZED=false` logs a security warning** and points at `NODE_EXTRA_CA_CERTS`.
+- **Lockfile refreshed** within declared ranges: `@modelcontextprotocol/sdk` 1.32.2, `undici` 8.13.1,
+  `zod` 4.6.7, `qs` 6.17.1. `npm audit --omit=dev` reports nothing.
+
+### Changed
+
+- Fork CI (`.github/workflows/ci.yml`) replaces the four WYRE-organisation workflows: lint, typecheck,
+  build, tests on Node 22 and 24, production audit, container smoke test. Read-only permissions.
+- `docker-compose.yml` is single-tenant env mode on `127.0.0.1:3101` with a read-only root, no
+  capabilities and a memory cap. `docker-compose.caddy.yml` and the root `Caddyfile` are replaced by
+  `deploy/caddy/` (site snippet for a shared host Caddy) and `deploy/systemd/` (hardened unit).
+- `.env.example` rewritten for the fork's configuration. `npm run check` runs the full local gate.
+
+## [Unreleased] (upstream)
 
 ### Security
 

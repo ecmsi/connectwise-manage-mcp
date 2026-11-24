@@ -1,0 +1,80 @@
+name: CI
+
+# Fork CI. The upstream repository delegates its pipeline to reusable
+# workflows in the WYRE-AI organisation with `secrets: inherit`; this fork runs
+# its own checks with read-only permissions and no third-party secrets.
+
+on:
+  push:
+    branches: [main, hardening]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["22.x", "24.x"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+  container-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build the image
+        run: docker build -t connectwise-manage-mcp:ci .
+      - name: Start with a bearer token in read-only mode and probe it
+        run: |
+          set -euo pipefail
+          TOKEN=$(openssl rand -hex 32)
+          docker run -d --name cwm --read-only --tmpfs /tmp \
+            --security-opt no-new-privileges:true --cap-drop ALL \
+            -p 127.0.0.1:3101:8080 \
+            -e MCP_BEARER_TOKEN="$TOKEN" \
+            -e CW_MANAGE_COMPANY_ID=ci -e CW_MANAGE_PUBLIC_KEY=ci -e CW_MANAGE_PRIVATE_KEY=ci -e CW_MANAGE_CLIENT_ID=ci \
+            -e CW_MANAGE_URL=https://cw.example.invalid \
+            connectwise-manage-mcp:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3101/health >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3101/health | tee /dev/stderr | grep -q '"status":"ok"'
+          # No token: 401.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:3101/mcp \
+            -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}')
+          test "$code" = "401"
+          # Token: 200, read tools listed, write tools absent.
+          body=$(curl -fsS -X POST http://127.0.0.1:3101/mcp \
+            -H "authorization: Bearer $TOKEN" \
+            -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}')
+          echo "$body" | grep -q '"cw_search_tickets"'
+          if echo "$body" | grep -q '"cw_create_ticket"'; then echo "write tool listed in read-only mode" >&2; exit 1; fi
+          docker logs cwm 2>&1 | grep -q "Write mode: read-only"
+          if docker logs cwm 2>&1 | grep -q "$TOKEN"; then echo "token leaked to logs" >&2; exit 1; fi
+      - name: Refuses to start with no authentication configured
+        run: |
+          set -euo pipefail
+          if docker run --rm -e CW_MANAGE_COMPANY_ID=ci connectwise-manage-mcp:ci; then
+            echo "started without auth" >&2; exit 1
+          fi
+      - if: always()
+        run: docker rm -f cwm >/dev/null 2>&1 || true

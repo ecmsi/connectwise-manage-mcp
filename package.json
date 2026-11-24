@@ -1,6 +1,6 @@
 {
   "name": "@wyre-ai/connectwise-manage-mcp",
-  "version": "1.4.0",
+  "version": "1.4.0-ecmsi.1",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },
@@ -24,11 +24,13 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests",
     "pack:mcpb": "node scripts/pack-mcpb.js",
-    "validate:mcpb": "mcpb validate manifest.json"
+    "validate:mcpb": "mcpb validate manifest.json",
+    "audit:prod": "npm audit --omit=dev --audit-level=moderate",
+    "check": "npm run lint && npm run typecheck && npm run build && npm test && npm run audit:prod"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/WYRE-AI/connectwise-manage-mcp.git"
+    "url": "git+https://github.com/ecmsi/connectwise-manage-mcp.git"
   },
   "keywords": [
     "mcp",
@@ -41,9 +43,9 @@
   "author": "Wyre Technology",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/WYRE-AI/connectwise-manage-mcp/issues"
+    "url": "https://github.com/ecmsi/connectwise-manage-mcp/issues"
   },
-  "homepage": "https://github.com/WYRE-AI/connectwise-manage-mcp#readme",
+  "homepage": "https://github.com/ecmsi/connectwise-manage-mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31.0",
     "jose": "^6.2.12",

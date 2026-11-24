@@ -1,0 +1,46 @@
+# ConnectWise Manage MCP: one site block for the host's shared Caddy.
+#
+# Install as /etc/caddy/sites/connectwise-mcp.caddy and have
+# /etc/caddy/Caddyfile contain:   import /etc/caddy/sites/*.caddy
+# Then: sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy
+#
+# Replace the hostname. Caddy issues and renews the certificate itself when
+# the name is publicly resolvable; for an internal name add a `tls` directive
+# pointing at your internal CA or certificate files.
+
+cw-mcp.example.com {
+	encode zstd gzip
+
+	# Only the MCP endpoint and the health probe exist. Everything else is
+	# answered here, never forwarded.
+	@allowed path /mcp /health
+	handle @allowed {
+		reverse_proxy 127.0.0.1:3101 {
+			# The server's own per-request timeout is 30 s; tool calls that page
+			# through ConnectWise can run longer than a default proxy timeout.
+			transport http {
+				response_header_timeout 120s
+			}
+		}
+	}
+	handle {
+		respond 404
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Cache-Control no-store
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/connectwise-mcp.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+}
