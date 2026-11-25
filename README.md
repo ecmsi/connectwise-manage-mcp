@@ -1,8 +1,13 @@
 # ConnectWise Manage MCP Server
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20.18-brightgreen.svg)](https://nodejs.org/)
-[![CI](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ecmsi/connectwise-manage-mcp?sort=semver&label=release)](https://github.com/ecmsi/connectwise-manage-mcp/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/ecmsi/connectwise-manage-mcp/ci.yml?branch=main&label=CI)](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%E2%89%A5%2020.18-brightgreen.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](tsconfig.json)
+[![MCP SDK](https://img.shields.io/github/package-json/dependency-version/ecmsi/connectwise-manage-mcp/@modelcontextprotocol/sdk?label=MCP%20SDK)](https://github.com/modelcontextprotocol/typescript-sdk)
+[![Default mode](https://img.shields.io/badge/default%20mode-read--only-success.svg)](#security-model)
+[![Last commit](https://img.shields.io/github/last-commit/ecmsi/connectwise-manage-mcp/main)](https://github.com/ecmsi/connectwise-manage-mcp/commits/main)
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server for ConnectWise Manage (PSA),
 maintained by ECMSI. It gives Claude, or any MCP-compatible assistant, 89 tools over tickets, notes,
@@ -13,29 +18,82 @@ It is built to run on a shared MCP host: one container per server, one TLS rever
 clients connecting directly with a bearer token, and nothing registered that can change PSA data
 unless an operator turns it on.
 
+![Architecture: clients over HTTPS to Caddy, Caddy to the container on loopback, the container to the ConnectWise API](docs/images/architecture.svg)
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Security model](#security-model)
+- [Documentation](#documentation)
+- [Configuration](#configuration)
+- [Available tools](#available-tools)
+- [Usage](#usage)
+- [Development](#development)
+- [License](#license)
+
+## Quick start
+
+On the host, after a ConnectWise API member exists ([how to set one up](docs/API-MEMBER-SETUP.md)):
+
+```bash
+sudo mkdir -p /opt/mcp/connectwise && cd /opt/mcp/connectwise
+sudo git clone --branch v2.0.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
+sudo cp src/docker-compose.yml compose.yml && sudo cp src/.env.example .env && sudo chmod 600 .env
+# edit .env: CW_MANAGE_* from the API member, MCP_BEARER_TOKEN from `openssl rand -hex 32`
+sudo docker compose build && sudo docker compose up -d
+curl -s http://127.0.0.1:3101/health          # {"status":"ok"}
+```
+
+Then install the Caddy site snippet from `deploy/caddy/` and point a client at
+`https://<hostname>/mcp` with the bearer token. The full procedure, including the Caddy step, client
+setup, updates and troubleshooting, is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+Locally, for one person on one machine:
+
+```bash
+npm ci && npm run build
+CW_MANAGE_COMPANY_ID=… CW_MANAGE_PUBLIC_KEY=… CW_MANAGE_PRIVATE_KEY=… CW_MANAGE_CLIENT_ID=… node dist/index.js
+```
+
+That starts the stdio transport; see [Usage](#usage) for the Claude Desktop and Claude Code entries.
+
+## Security model
+
+- **The API member is the ceiling.** The server can read what its ConnectWise security role lets
+  it read, and nothing more. Use a dedicated member with a role built for this server.
+- **Read-only by default.** `CW_WRITE_MODE=read-only` registers the 63 `get`/`search`/`list`/`test`
+  tools and nothing else. Write tools are not listed and cannot be called until an operator sets
+  `CW_WRITE_MODE=write`. A test scans every tool's source and fails if a read-named tool ever
+  issues anything but GET. This matters because ticket text is written by customers and reaches the
+  model verbatim: an instruction hidden in a note cannot change PSA data when the tools that would
+  do it do not exist in the process.
+- **Direct clients authenticate with a bearer token.** `MCP_BEARER_TOKEN` is compared in constant
+  time, must be at least 32 characters, and placeholder values are refused. HTTP refuses to start
+  with no mechanism configured. A signed-gateway header (`MCP_S2S_SECRET`) and Entra ID OAuth are
+  also supported; every configured mechanism is enforced.
+- **Abuse controls and audit.** Per-client rate limiting, a health endpoint that discloses nothing,
+  redirects refused on every ConnectWise request, upstream error bodies never forwarded or logged,
+  and one log line per tool call with the tool name, outcome and duration, never its arguments.
+- **Container.** Non-root, read-only root filesystem, no capabilities, memory cap, published on
+  loopback only; secrets live in one `.env` with mode 600.
+- **Supply chain.** `npm audit` reports nothing, for production and the full tree, and CI enforces
+  it. No install-time scripts run. The embedded ticket-card bundle is reproducible from source.
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/API-MEMBER-SETUP.md](docs/API-MEMBER-SETUP.md) | Creating the ConnectWise security role, API member, key pair and Client ID, with the permission each tool needs |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | The shared-host layout, install, Caddy, clients, operation, updates, troubleshooting |
+| [deploy/](deploy/) | Caddy site snippet and systemd unit |
+| [entra-app-registration.md](entra-app-registration.md) | Entra ID app registration, only if you enable OAuth |
+| [docs/ORIGIN.md](docs/ORIGIN.md) | Where the code came from and what changed at the point of divergence |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+
 **Origin.** This project was derived on 2026-11-24 from the
 [ConnectWise Manage MCP Server by WYRE Technology](https://github.com/WYRE-AI/connectwise-manage-mcp)
 (Apache-2.0) and has been maintained independently since. It is not affiliated with or endorsed by
-the original authors. [NOTICE](NOTICE) carries the attribution and [docs/ORIGIN.md](docs/ORIGIN.md)
-records what was changed at the point of divergence and why.
-
-## What this project does differently
-
-- **Direct-client authentication.** `MCP_BEARER_TOKEN` is a complete mechanism on its own:
-  constant-time compared, 32-character minimum, placeholder values refused. HTTP refuses to start with
-  no mechanism configured.
-- **Read-only by default.** `CW_WRITE_MODE=read-only` registers the 63 `get`/`search`/`list`/`test`
-  tools and nothing else. Write tools are not listed and cannot be called until `CW_WRITE_MODE=write`.
-- **Audit and abuse controls.** One log line per tool call (name, outcome, duration; never
-  arguments), per-client rate limiting, a health endpoint that discloses nothing, redirects refused on
-  every ConnectWise request.
-- **Clean dependency tree.** `npm audit` reports nothing, in production and in the full tree, and
-  CI enforces it.
-- **Deployment as code.** A hardened compose file, a site snippet for the host's Caddy, a systemd
-  unit, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the shared-host layout.
-
-Local gate: `npm run check` (lint, typecheck, build, tests, production audit). CI runs the same on
-Node 22 and 24 plus a container smoke test.
+the original authors; [NOTICE](NOTICE) carries the attribution.
 
 ## Configuration
 
@@ -68,7 +126,7 @@ none of the HTTP settings.
 
 ### HTTP authentication
 
-**Bearer token** (the ECMSI host). Every `/mcp` request carries `Authorization: Bearer <MCP_BEARER_TOKEN>`.
+**Bearer token** (the usual choice). Every `/mcp` request carries `Authorization: Bearer <MCP_BEARER_TOKEN>`.
 A missing or wrong token answers `401` with a `WWW-Authenticate` header, and the failure is logged
 with the client address.
 
@@ -101,13 +159,10 @@ appends `/v4_6_release/apis/3.0` unless the URL already contains that path.
 
 ### Getting your API keys
 
-1. Log in to ConnectWise Manage.
-2. Go to **System > Members > API Members** and create a member dedicated to this server, with the
-   narrowest security role that covers the tools you will use.
-3. Generate API keys for that member.
-4. Get a Client ID from the [ConnectWise Developer Portal](https://developer.connectwise.com/).
+Follow [docs/API-MEMBER-SETUP.md](docs/API-MEMBER-SETUP.md): a security role built for this server,
+an API member with that role, a key pair on the member, and a Client ID from the developer portal.
 
-## Available Tools
+## Available tools
 
 ### Custom field filters
 
