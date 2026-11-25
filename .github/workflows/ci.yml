@@ -5,7 +5,7 @@ name: CI
 
 on:
   push:
-    branches: [main, hardening]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -20,8 +20,8 @@ jobs:
       matrix:
         node-version: ["22.x", "24.x"]
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
@@ -36,9 +36,9 @@ jobs:
   container-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Build the image
-        run: docker build -t connectwise-manage-mcp:ci .
+        run: docker build --target production -t connectwise-manage-mcp:ci .
       - name: Start with a bearer token in read-only mode and probe it
         run: |
           set -euo pipefail
@@ -69,6 +69,15 @@ jobs:
           if echo "$body" | grep -q '"cw_create_ticket"'; then echo "write tool listed in read-only mode" >&2; exit 1; fi
           docker logs cwm 2>&1 | grep -q "Write mode: read-only"
           if docker logs cwm 2>&1 | grep -q "$TOKEN"; then echo "token leaked to logs" >&2; exit 1; fi
+      - name: Permission check script ships in the image and loads
+        run: |
+          set -euo pipefail
+          # Without credentials it must stop with exit 2 and the usage message, after importing dist/.
+          set +e
+          out=$(docker run --rm connectwise-manage-mcp:ci node scripts/check-permissions.mjs 2>&1); code=$?
+          set -e
+          test "$code" = "2"
+          echo "$out" | grep -q "Missing CW_MANAGE_COMPANY_ID"
       - name: Refuses to start with no authentication configured
         run: |
           set -euo pipefail

@@ -1,0 +1,151 @@
+name: Release
+
+# Runs when a version tag is pushed. Re-checks the tag against the version in
+# the tree, runs the full gate, publishes the container image to GitHub
+# Container Registry, then creates the GitHub Release with the image digest
+# and the npm tarball attached. Nothing here deploys anywhere.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify version and release gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Match tag to the version in the tree
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tags are vMAJOR.MINOR.PATCH (received $TAG_NAME)" >&2
+            exit 1
+          fi
+          npm run version:check -- "${TAG_NAME#v}"
+      - name: Run the release gate
+        run: npm run check
+
+  publish-image:
+    name: Publish container image
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate image tags and labels
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=ConnectWise Manage MCP server
+            org.opencontainers.image.description=Model Context Protocol server for ConnectWise Manage (PSA), maintained by ECMSI
+            org.opencontainers.image.vendor=ECMSI
+            org.opencontainers.image.licenses=Apache-2.0
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: production
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.metadata.outputs.version }}
+            COMMIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: mode=max
+          sbom: true
+
+  release:
+    name: Publish GitHub Release
+    needs: publish-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.x"
+          cache: npm
+      - name: Build the package tarball
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${TAG_NAME#v}"
+          npm ci --ignore-scripts
+          npm run build
+          # Ship the exact dependency tree the gate ran against; npm reads
+          # npm-shrinkwrap.json from the tarball on install.
+          npm shrinkwrap
+          mkdir -p release
+          npm pack --pack-destination release
+          TARBALL="release/ecmsi-connectwise-manage-mcp-${TAG_VERSION}.tgz"
+          test -f "$TARBALL"
+          (cd release && sha256sum "$(basename "$TARBALL")" > "$(basename "$TARBALL").sha256")
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          IMAGE_DIGEST: ${{ needs.publish-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Published image did not return an immutable sha256 digest" >&2
+            exit 1
+          fi
+          NOTES="Container image: \`ghcr.io/${GITHUB_REPOSITORY}:${TAG_VERSION}\` (linux/amd64, linux/arm64)
+          Immutable digest: \`${IMAGE_DIGEST}\`
+          Package tarball: \`$(basename "$TARBALL")\` with its checksum in the matching \`.sha256\` asset; \`npm install -g <tarball>\` gives the \`connectwise-manage-mcp\` command on any machine with Node.js 20.18 or newer.
+
+          Deployment: https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/DEPLOYMENT.md"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; uploading assets only."
+            gh release upload "$GITHUB_REF_NAME" --clobber "$TARBALL" "$TARBALL.sha256"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --latest \
+              --title "$GITHUB_REF_NAME" \
+              --notes "$NOTES" \
+              --generate-notes \
+              "$TARBALL" "$TARBALL.sha256"
+          fi

@@ -2,6 +2,8 @@
 
 [![Release](https://img.shields.io/github/v/release/ecmsi/connectwise-manage-mcp?sort=semver&label=release)](https://github.com/ecmsi/connectwise-manage-mcp/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/ecmsi/connectwise-manage-mcp/ci.yml?branch=main&label=CI)](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml)
+[![Release pipeline](https://img.shields.io/github/actions/workflow/status/ecmsi/connectwise-manage-mcp/release.yml?label=release%20pipeline)](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/release.yml)
+[![Container image](https://img.shields.io/badge/ghcr.io-ecmsi%2Fconnectwise--manage--mcp-0db7ed?logo=docker&logoColor=white)](https://github.com/ecmsi/connectwise-manage-mcp/pkgs/container/connectwise-manage-mcp)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A5%2020.18-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](tsconfig.json)
@@ -37,10 +39,10 @@ On the host, after a ConnectWise API member exists ([how to set one up](docs/API
 
 ```bash
 sudo mkdir -p /opt/mcp/connectwise && cd /opt/mcp/connectwise
-sudo git clone --branch v2.1.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
-sudo cp src/docker-compose.yml compose.yml && sudo cp src/.env.example .env && sudo chmod 600 .env
+sudo curl -fsSLo compose.yml https://raw.githubusercontent.com/ecmsi/connectwise-manage-mcp/v2.2.0/docker-compose.yml
+sudo curl -fsSLo .env https://raw.githubusercontent.com/ecmsi/connectwise-manage-mcp/v2.2.0/.env.example && sudo chmod 600 .env
 # edit .env: CW_MANAGE_* from the API member, MCP_BEARER_TOKEN from `openssl rand -hex 32`
-sudo docker compose build && sudo docker compose up -d
+sudo docker compose pull && sudo docker compose up -d   # ghcr.io/ecmsi/connectwise-manage-mcp:2.2.0
 curl -s http://127.0.0.1:3101/health          # {"status":"ok"}
 ```
 
@@ -385,20 +387,24 @@ Keeping credentials out of the client file is better still: `node --env-file=/pa
 
 ### With Docker
 
-`docker-compose.yml` is the shared-host shape: credentials and the bearer token from a `.env`
-beside it, published on `127.0.0.1:3101`, read-only root filesystem, no capabilities, memory cap,
+Every release publishes `ghcr.io/ecmsi/connectwise-manage-mcp:<version>` (Linux AMD64 and ARM64,
+with provenance attestation and SBOM; the release notes carry the immutable digest). `docker-compose.yml`
+is the shared-host shape: that image, credentials and the bearer token from a `.env` beside it,
+published on `127.0.0.1:3101`, read-only root filesystem, no capabilities, memory cap,
 `MCP_TRUST_PROXY=1` for the reverse proxy in front.
 
 ```bash
 cp .env.example .env && chmod 600 .env   # fill in CW_MANAGE_* and MCP_BEARER_TOKEN
-docker compose build
+docker compose pull
 docker compose up -d
 curl -s http://127.0.0.1:3101/health     # {"status":"ok"}
 ```
 
-The container refuses to start until `MCP_BEARER_TOKEN` (or another mechanism) is set, so the
-listener is never reachable unauthenticated. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers the
-rest: the Caddy site, client setup, operation, updates and troubleshooting.
+To build the same image from a checkout instead,
+`docker build --target production -t ghcr.io/ecmsi/connectwise-manage-mcp:2.2.0 .` first. The
+container refuses to start until `MCP_BEARER_TOKEN` (or another mechanism) is set, so the listener is
+never reachable unauthenticated. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers the rest: the Caddy
+site, client setup, operation, updates and troubleshooting.
 
 ## Development
 

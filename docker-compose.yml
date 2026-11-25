@@ -7,13 +7,15 @@
 # Everything secret lives in .env (chmod 600), loaded with env_file. Nothing
 # here holds a credential. Run from the directory that holds this file and
 # .env, for example /opt/mcp/connectwise.
+#
+# The image is the one the release workflow publishes for each tag. To pin by
+# digest instead, replace ":2.2.0" with "@sha256:<digest from the release
+# notes>". To run from a source checkout instead of the registry, build the
+# same tag locally first:
+#   docker build --target production -t ghcr.io/ecmsi/connectwise-manage-mcp:2.2.0 <checkout>
 services:
   connectwise-mcp:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
-    image: connectwise-manage-mcp:local
+    image: ghcr.io/ecmsi/connectwise-manage-mcp:2.2.0
     container_name: connectwise-mcp
     restart: unless-stopped
     env_file:

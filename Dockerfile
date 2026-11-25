@@ -1,52 +1,47 @@
-# Multi-stage build for efficient container size
-FROM node:26-alpine AS builder
+# Two stages. The builder compiles TypeScript on the build machine's own
+# architecture (no emulation under buildx); the production stage installs the
+# runtime dependencies natively for the target architecture and copies in only
+# the compiled output, so the image never carries the compiler or dev tools.
+FROM --platform=$BUILDPLATFORM node:26-alpine AS builder
 
-# Build arguments
-ARG VERSION="unknown"
-ARG COMMIT_SHA="unknown"
-ARG BUILD_DATE="unknown"
-
-# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies (--ignore-scripts prevents 'prepare' from running before source is copied)
+# --ignore-scripts: nothing in the dependency tree needs an install hook.
+COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
-# Copy source code
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Production stage
 FROM node:26-alpine AS production
 
-# Create a non-root user for security
+# Supplied by the release workflow; the labels at the end carry them.
+ARG VERSION="unknown"
+ARG COMMIT_SHA="unknown"
+
 RUN addgroup -g 1001 -S cwmanage && \
     adduser -S cwmanage -u 1001 -G cwmanage
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files and built application from builder stage
-COPY package*.json ./
+# Runtime dependencies only, resolved from the same lockfile the gate ran against.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
+# The permission check runs from inside the image:
+#   docker compose run --rm connectwise-mcp node scripts/check-permissions.mjs
+COPY scripts/check-permissions.mjs ./scripts/
 
-# Prune dev dependencies
-RUN npm prune --omit=dev --ignore-scripts && npm cache clean --force && chown -R root:root /app
+# Everything under /app is owned by root and read-only to the service user.
+RUN chown -R root:root /app
 
-# Switch to non-root user. The image is read-only at runtime (nothing is
-# written under /app); run with --read-only and a tmpfs on /tmp.
+# The image is read-only at runtime (nothing is written under /app); run with
+# --read-only and a tmpfs on /tmp.
 USER cwmanage
 
-# Expose port for HTTP transport
 EXPOSE 8080
 
-# Health check against the HTTP endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:8080/health || exit 1
 
@@ -62,16 +57,12 @@ ENV MCP_HTTP_PORT=8080
 ENV MCP_HTTP_HOST=0.0.0.0
 ENV AUTH_MODE=env
 
-# Start the application
 CMD ["node", "dist/index.js"]
 
-# Labels for metadata
-LABEL version="${VERSION}"
-LABEL description="ConnectWise Manage MCP Server (ECMSI fork) - Model Context Protocol server for ConnectWise PSA"
 LABEL org.opencontainers.image.title="connectwise-manage-mcp"
-LABEL org.opencontainers.image.description="Model Context Protocol server for ConnectWise Manage (PSA) integration"
+LABEL org.opencontainers.image.description="Model Context Protocol server for ConnectWise Manage (PSA), maintained by ECMSI"
+LABEL org.opencontainers.image.vendor="ECMSI"
 LABEL org.opencontainers.image.version="${VERSION}"
-LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
 LABEL org.opencontainers.image.source="https://github.com/ecmsi/connectwise-manage-mcp"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
