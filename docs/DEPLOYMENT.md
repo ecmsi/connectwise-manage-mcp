@@ -39,7 +39,7 @@ Caddy is the only thing that listens on the network. Adding a server never touch
   `env_file`. They never go in a client config, a compose file, a Caddy file or a shell history.
 - **The container speaks plain HTTP on loopback.** Caddy terminates TLS. Never publish a container
   port on `0.0.0.0`.
-- **Pin what you deploy.** Check out a tag (`v1.4.0-ecmsi.1`), build from it, and record the commit.
+- **Pin what you deploy.** Check out a tag (`v2.0.0`), build from it, and record the commit.
 - **One replica per server.** Rate limits and the time-entry lock are in process memory.
 
 ## Prerequisites
@@ -54,7 +54,7 @@ Caddy is the only thing that listens on the network. Adding a server never touch
 
 ```bash
 sudo mkdir -p /opt/mcp/connectwise && cd /opt/mcp/connectwise
-sudo git clone --branch v1.4.0-ecmsi.1 https://github.com/ecmsi/connectwise-manage-mcp.git src
+sudo git clone --branch v2.0.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
 sudo cp src/docker-compose.yml compose.yml
 sudo cp src/.env.example .env
 sudo chmod 600 .env
@@ -177,15 +177,16 @@ every client. Rotate the API keys in ConnectWise the same way (the API member's 
 ```bash
 cd /opt/mcp/connectwise/src
 sudo git fetch --tags
-sudo git diff v1.4.0-ecmsi.1 v1.4.0-ecmsi.2 --stat     # read the diff before moving the pin
-sudo git checkout v1.4.0-ecmsi.2
+sudo git diff v2.0.0 v2.0.1 --stat     # read the diff before moving the pin
+sudo git checkout v2.0.1
 cd .. && sudo docker compose build && sudo docker compose up -d
 curl -s http://127.0.0.1:3101/health
 ```
 
-Rolling back is the same procedure with the previous tag. Treat every upstream merge as a new
-review: re-check `src/index.ts`, `src/http-auth.ts`, `src/tool-policy.ts`, `src/api-client.ts` and
-any new `fetch` call or environment variable.
+Rolling back is the same procedure with the previous tag. If code is ever pulled in from the
+original project this one was derived from, treat it as a new review: re-check `src/index.ts`,
+`src/http-auth.ts`, `src/tool-policy.ts`, `src/api-client.ts` and any new `fetch` call or
+environment variable.
 
 ## Write mode
 
@@ -209,7 +210,7 @@ For a host where Docker is not wanted, run the checkout under systemd with the u
 ```bash
 sudo useradd --system --home /opt/connectwise-mcp --shell /usr/sbin/nologin connectwise-mcp
 sudo mkdir -p /opt/connectwise-mcp && cd /opt/connectwise-mcp
-sudo git clone --branch v1.4.0-ecmsi.1 https://github.com/ecmsi/connectwise-manage-mcp.git app
+sudo git clone --branch v2.0.0 https://github.com/ecmsi/connectwise-manage-mcp.git app
 cd app && sudo npm ci --ignore-scripts && sudo npm run build && sudo npm prune --omit=dev
 sudo cp .env.example ../.env && sudo chmod 600 ../.env
 sudo chown -R connectwise-mcp:connectwise-mcp /opt/connectwise-mcp

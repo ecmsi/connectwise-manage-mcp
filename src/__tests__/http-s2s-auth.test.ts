@@ -1,7 +1,7 @@
 /**
  * HTTP transport fail-closed auth (CWE-306).
  *
- * Startup requires a real CONDUIT_S2S_SECRET unless MCP_ALLOW_INSECURE_DEV=1.
+ * Startup requires a real MCP_S2S_SECRET unless MCP_ALLOW_INSECURE_DEV=1.
  * Known placeholder secrets always refuse to start. The dev bypass binds
  * 127.0.0.1 only. /mcp rejects a missing or invalid X-Gateway-S2S header.
  * AUTH_MODE=gateway rejects requests that omit vendor credential headers
@@ -43,7 +43,7 @@ const ENV_PRIVATE = "env-private-must-not-be-used";
 const ENV_CLIENT = "env-client-must-not-be-used";
 
 const ENV_KEYS = [
-  "CONDUIT_S2S_SECRET",
+  "MCP_S2S_SECRET",
   "MCP_ALLOW_INSECURE_DEV",
   "MCP_HTTP_PORT",
   "MCP_HTTP_HOST",
@@ -197,9 +197,9 @@ afterEach(async () => {
   resetCredentialSpies();
 });
 
-describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
+describe("HTTP startup fails closed without MCP_S2S_SECRET", () => {
   it("logs an error and exits when the secret is unset", async () => {
-    delete process.env.CONDUIT_S2S_SECRET;
+    delete process.env.MCP_S2S_SECRET;
     delete process.env.MCP_ALLOW_INSECURE_DEV;
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.MCP_HTTP_PORT = "0";
@@ -210,14 +210,14 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
     await expect(startHttpTransport()).rejects.toThrow("process.exit:1");
     expect(exitSpy).toHaveBeenCalledWith(1);
     const logged = logs.text();
-    expect(logged).toContain("Refusing to start HTTP transport: CONDUIT_S2S_SECRET is empty.");
+    expect(logged).toContain("Refusing to start HTTP transport: MCP_S2S_SECRET is empty.");
     expect(logged).toContain("CWE-306");
     expect(logged).toContain("MCP_ALLOW_INSECURE_DEV=1");
     assertNoSecrets(logged);
   });
 
   it("exits when the secret is whitespace and the dev flag is not exactly 1", async () => {
-    process.env.CONDUIT_S2S_SECRET = "   ";
+    process.env.MCP_S2S_SECRET = "   ";
     process.env.MCP_ALLOW_INSECURE_DEV = "true";
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.MCP_HTTP_PORT = "0";
@@ -225,7 +225,7 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
     const logs = captureStderr();
     installExitSpy();
     await expect(startHttpTransport()).rejects.toThrow("process.exit:1");
-    expect(logs.text()).toContain("CONDUIT_S2S_SECRET is empty");
+    expect(logs.text()).toContain("MCP_S2S_SECRET is empty");
   });
 
   it.each([
@@ -235,7 +235,7 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
     "your-s2s-secret",
     "  Your-Secret  ",
   ])("refuses known placeholder %j and does not log it", async (placeholder) => {
-    process.env.CONDUIT_S2S_SECRET = placeholder;
+    process.env.MCP_S2S_SECRET = placeholder;
     delete process.env.MCP_ALLOW_INSECURE_DEV;
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.MCP_HTTP_PORT = "0";
@@ -246,13 +246,13 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
     const logged = logs.text();
     expect(logged).toBe(
-      "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is a known placeholder. " +
-        "Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value.",
+      "Refusing to start HTTP transport: MCP_S2S_SECRET is a known placeholder. " +
+        "Generate a secret with `openssl rand -hex 32` and set MCP_S2S_SECRET to that value.",
     );
   });
 
   it("refuses a placeholder even when MCP_ALLOW_INSECURE_DEV=1", async () => {
-    process.env.CONDUIT_S2S_SECRET = "  Change-Me  ";
+    process.env.MCP_S2S_SECRET = "  Change-Me  ";
     process.env.MCP_ALLOW_INSECURE_DEV = "1";
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.MCP_HTTP_PORT = "0";
@@ -261,13 +261,13 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
     installExitSpy();
     await expect(startHttpTransport()).rejects.toThrow("process.exit:1");
     expect(logs.text()).toBe(
-      "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is a known placeholder. " +
-        "Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value.",
+      "Refusing to start HTTP transport: MCP_S2S_SECRET is a known placeholder. " +
+        "Generate a secret with `openssl rand -hex 32` and set MCP_S2S_SECRET to that value.",
     );
   });
 
   it("starts with a warning and binds 127.0.0.1 when MCP_ALLOW_INSECURE_DEV=1", async () => {
-    delete process.env.CONDUIT_S2S_SECRET;
+    delete process.env.MCP_S2S_SECRET;
     delete process.env.MCP_HTTP_HOST;
     process.env.MCP_ALLOW_INSECURE_DEV = "1";
     process.env.AUTH_MODE = "gateway";
@@ -289,7 +289,7 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
   });
 
   it("forces 127.0.0.1 when the dev bypass is set and MCP_HTTP_HOST is not loopback", async () => {
-    delete process.env.CONDUIT_S2S_SECRET;
+    delete process.env.MCP_S2S_SECRET;
     process.env.MCP_ALLOW_INSECURE_DEV = "1";
     process.env.MCP_HTTP_HOST = "0.0.0.0";
     process.env.AUTH_MODE = "gateway";
@@ -306,8 +306,8 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
     assertNoSecrets(logged);
   });
 
-  it("honors a non-loopback MCP_HTTP_HOST when CONDUIT_S2S_SECRET is set", async () => {
-    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+  it("honors a non-loopback MCP_HTTP_HOST when MCP_S2S_SECRET is set", async () => {
+    process.env.MCP_S2S_SECRET = S2S_SECRET;
     delete process.env.MCP_ALLOW_INSECURE_DEV;
     process.env.MCP_HTTP_HOST = "0.0.0.0";
     process.env.AUTH_MODE = "gateway";
@@ -321,7 +321,7 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
   });
 
   it("defaults to 127.0.0.1 when a secret is set and MCP_HTTP_HOST is unset", async () => {
-    process.env.CONDUIT_S2S_SECRET = `  ${S2S_SECRET}  `;
+    process.env.MCP_S2S_SECRET = `  ${S2S_SECRET}  `;
     delete process.env.MCP_ALLOW_INSECURE_DEV;
     delete process.env.MCP_HTTP_HOST;
     process.env.AUTH_MODE = "gateway";
@@ -336,7 +336,7 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
 
 describe("gateway /mcp auth", () => {
   async function startGateway(): Promise<number> {
-    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.MCP_S2S_SECRET = S2S_SECRET;
     delete process.env.MCP_ALLOW_INSECURE_DEV;
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.AUTH_MODE = "gateway";
@@ -487,7 +487,7 @@ describe("gateway /mcp auth", () => {
 
 describe("env-mode HTTP still requires S2S", () => {
   it("uses CW_MANAGE_* after a valid S2S header and ignores a partial header set", async () => {
-    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.MCP_S2S_SECRET = S2S_SECRET;
     delete process.env.MCP_ALLOW_INSECURE_DEV;
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.AUTH_MODE = "env";

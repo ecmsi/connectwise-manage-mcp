@@ -26,8 +26,9 @@
  *                                 mechanism is configured. Without one,
  *                                 MCP_ALLOW_INSECURE_DEV=1 forces 127.0.0.1.
  *   AUTH_MODE                   - "env" (default) or "gateway" for header-based auth.
- *                                 Gateway mode requires CONDUIT_S2S_SECRET.
- *   CONDUIT_S2S_SECRET          - HMAC secret for X-Gateway-S2S (WYRE gateway).
+ *                                 Gateway mode requires MCP_S2S_SECRET.
+ *   MCP_S2S_SECRET              - HMAC secret for X-Gateway-S2S, when a signing
+ *                                 gateway or proxy sits in front of this server.
  *   MCP_BEARER_TOKEN            - Static bearer token for direct clients
  *                                 (Claude Code, Claude Desktop, claude.ai).
  *                                 At least 32 characters; openssl rand -hex 32.
@@ -39,7 +40,7 @@
  *                                 X-Forwarded-For, so the rate limiter sees the
  *                                 real client address.
  *
- * HTTP refuses to start unless at least one of CONDUIT_S2S_SECRET,
+ * HTTP refuses to start unless at least one of MCP_S2S_SECRET,
  * MCP_BEARER_TOKEN or MCP_OAUTH_ENABLED=true is configured, or
  * MCP_ALLOW_INSECURE_DEV=1. Every configured mechanism is enforced on /mcp.
  *
@@ -139,7 +140,7 @@ function resolveListenHost(auth: HttpAuthConfig): string {
   if (configured && !isLoopbackHost(configured)) {
     console.error(
       `WARNING: MCP_HTTP_HOST=${configured} is not a loopback address. ` +
-        "MCP_ALLOW_INSECURE_DEV=1 without CONDUIT_S2S_SECRET cannot listen there. " +
+        "MCP_ALLOW_INSECURE_DEV=1 without MCP_S2S_SECRET cannot listen there. " +
         `Binding ${LOOPBACK_HOST} only.`,
     );
   }

@@ -52,7 +52,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Bind every interface inside the container; host exposure is the `ports`
 # entry in compose (loopback). Startup refuses to run unless MCP_BEARER_TOKEN,
-# CONDUIT_S2S_SECRET or OAuth is configured, so 0.0.0.0 is never reachable
+# MCP_S2S_SECRET or OAuth is configured, so 0.0.0.0 is never reachable
 # unauthenticated. CW_WRITE_MODE defaults to read-only in the code; set it to
 # write in .env deliberately.
 ENV NODE_ENV=production

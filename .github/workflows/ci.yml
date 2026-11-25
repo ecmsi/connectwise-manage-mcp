@@ -1,8 +1,7 @@
 name: CI
 
-# Fork CI. The upstream repository delegates its pipeline to reusable
-# workflows in the WYRE-AI organisation with `secrets: inherit`; this fork runs
-# its own checks with read-only permissions and no third-party secrets.
+# The one CI workflow for this repository: read-only permissions, no reusable
+# workflows from other organisations, no third-party secrets.
 
 on:
   push:

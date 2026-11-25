@@ -1,5 +1,5 @@
 /**
- * WYREAI-495: time-entry email flags must not default on, and ticket-note
+ * Time-entry email flags must not default on, and ticket-note
  * email field names must not be posted on ServiceNote (that 400s).
  */
 
@@ -61,7 +61,7 @@ const baseEntry = {
   timeStart: "2026-10-13T15:00:00Z",
 };
 
-describe("time entry email defaults (WYREAI-495)", () => {
+describe("time entry email defaults", () => {
   it("sends every email flag false when the caller omits them", () => {
     const body = buildCreateTimeEntryBody(baseEntry);
     expect(body.emailContactFlag).toBe(false);
@@ -179,7 +179,7 @@ function allText(body: Record<string, unknown>): string[] {
 const TICKET_FIELDS = "automaticEmailContactFlag,automaticEmailResourceFlag,automaticEmailCcFlag";
 const createdEntry = { id: 6188, emailContactFlag: false, emailResourceFlag: false, emailCcFlag: false };
 
-describe("cw_create_time_entry ticket auto-email guard (WYREAI-495)", () => {
+describe("cw_create_time_entry ticket auto-email guard", () => {
   for (const [label, extra] of [
     ["entry flag unset", {}],
     ["entry flag explicit false", { emailContactFlag: false }],
@@ -492,7 +492,7 @@ describe("cw_create_time_entry ticket auto-email guard (WYREAI-495)", () => {
   });
 });
 
-describe("createTimeEntryWithEmailGuard (WYREAI-495)", () => {
+describe("createTimeEntryWithEmailGuard", () => {
   function fakeClient(ticket: Record<string, unknown>) {
     const log: string[] = [];
     const client: TimeEntryClient = {
@@ -541,7 +541,7 @@ describe("createTimeEntryWithEmailGuard (WYREAI-495)", () => {
   });
 });
 
-describe("restoring the ticket flags after the create (WYREAI-495)", () => {
+describe("restoring the ticket flags after the create", () => {
   const NO_WAIT = { restoreBackoffMs: [0, 0] } as const;
 
   /** Ticket with the contact flag on; restore PATCHes (value true) fail `restoreFailures` times. */
@@ -696,7 +696,7 @@ describe("restoring the ticket flags after the create (WYREAI-495)", () => {
   });
 });
 
-describe("per-ticket lock around the auto-email guard (WYREAI-495)", () => {
+describe("per-ticket lock around the auto-email guard", () => {
   const FLAG_NAMES = ["automaticEmailContactFlag", "automaticEmailResourceFlag", "automaticEmailCcFlag"] as const;
 
   function deferred() {
@@ -884,7 +884,7 @@ describe("per-ticket lock around the auto-email guard (WYREAI-495)", () => {
   });
 });
 
-describe("ticket note email payload (WYREAI-495)", () => {
+describe("ticket note email payload", () => {
   it("never places TimeEntry email fields on a ServiceNote", () => {
     const body = buildTicketNoteBody({
       text: "hello",

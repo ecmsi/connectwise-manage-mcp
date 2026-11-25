@@ -44,9 +44,9 @@ describe("resolveHttpAuthConfig", () => {
   });
 
   it("accepts an S2S secret alone and both together", () => {
-    const only = resolveHttpAuthConfig({ CONDUIT_S2S_SECRET: "s2s-7f3a9c-real" }, direct);
+    const only = resolveHttpAuthConfig({ MCP_S2S_SECRET: "s2s-7f3a9c-real" }, direct);
     expect(only.ok && only.config.s2sSecret).toBe("s2s-7f3a9c-real");
-    const both = resolveHttpAuthConfig({ CONDUIT_S2S_SECRET: "s2s-7f3a9c-real", MCP_BEARER_TOKEN: TOKEN }, direct);
+    const both = resolveHttpAuthConfig({ MCP_S2S_SECRET: "s2s-7f3a9c-real", MCP_BEARER_TOKEN: TOKEN }, direct);
     expect(both.ok && both.config).toEqual({
       s2sSecret: "s2s-7f3a9c-real",
       bearerToken: TOKEN,
@@ -74,7 +74,7 @@ describe("resolveHttpAuthConfig", () => {
   );
 
   it("refuses a placeholder S2S secret even with the dev bypass", () => {
-    expect(resolveHttpAuthConfig({ CONDUIT_S2S_SECRET: "secret", MCP_ALLOW_INSECURE_DEV: "1" }, direct)).toEqual({
+    expect(resolveHttpAuthConfig({ MCP_S2S_SECRET: "secret", MCP_ALLOW_INSECURE_DEV: "1" }, direct)).toEqual({
       ok: false,
       error: PLACEHOLDER_S2S_SECRET_ERROR,
     });

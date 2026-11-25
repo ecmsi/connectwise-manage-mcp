@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing! This project is maintained by [WYRE AI](https://github.com/WYRE-AI).
+Thank you for your interest in contributing! This project is maintained by [ECMSI](https://github.com/ecmsi). Run `npm run check` before opening a pull request; it is the same gate CI runs.
 
 ## Getting Started
 

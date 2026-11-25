@@ -1,5 +1,5 @@
 /**
- * WYREAI-400: note email flags, parent ticket create, contact type search,
+ * Note email flags, parent ticket create, contact type search,
  * time entry update/delete, and honest note-create visibility flags.
  */
 
@@ -211,7 +211,7 @@ describe("contact search conditions (A3)", () => {
   });
 });
 
-describe("WYREAI-400 tool wiring", () => {
+describe("note flags, parent ticket and contact type search tool wiring", () => {
   it("exposes note email fields, parentTicketId, contact type filters, and time entry update/delete", async () => {
     const body = await mcp("tools/list", {});
     const tools = (body.result as { tools: { name: string; description?: string; inputSchema?: { properties?: Record<string, unknown> } }[] }).tools;

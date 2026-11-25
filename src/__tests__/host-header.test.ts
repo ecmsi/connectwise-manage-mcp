@@ -151,7 +151,7 @@ describe("HTTP server with a malformed Host header", () => {
     // listens on 127.0.0.1 and still runs this request listener. Vitest skips
     // the CLI entrypoint, so start the transport directly.
     process.env.MCP_ALLOW_INSECURE_DEV = "1";
-    delete process.env.CONDUIT_S2S_SECRET;
+    delete process.env.MCP_S2S_SECRET;
     process.env.MCP_HTTP_HOST = "127.0.0.1";
     process.env.MCP_HTTP_PORT = "0";
     server = await startHttpTransport();

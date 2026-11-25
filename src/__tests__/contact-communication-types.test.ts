@@ -1,5 +1,5 @@
 /**
- * WYREAI-529: cw_create_contact resolves communication types per tenant
+ * Cw_create_contact resolves communication types per tenant
  * instead of hardcoding "Email" / "Direct".
  */
 

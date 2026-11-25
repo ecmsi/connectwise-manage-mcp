@@ -7,8 +7,8 @@
  *
  * Three caller-authentication mechanisms exist for `/mcp`:
  *
- * - `CONDUIT_S2S_SECRET`: an HMAC proof on `X-Gateway-S2S`, for the WYRE
- *   gateway deployment (see s2s-verify.ts).
+ * - `MCP_S2S_SECRET`: an HMAC proof on `X-Gateway-S2S`, for a signing
+ *   gateway or proxy in front of this server (see s2s-verify.ts).
  * - `MCP_BEARER_TOKEN`: a static `Authorization: Bearer` token, for clients
  *   that connect directly (Claude Code, Claude Desktop, claude.ai connectors)
  *   through a TLS reverse proxy. Compared in constant time.
@@ -46,16 +46,16 @@ export const KNOWN_PLACEHOLDER_SECRETS = new Set([
 export const MIN_BEARER_TOKEN_LENGTH = 32;
 
 export const MISSING_AUTH_ERROR =
-  "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is empty. " +
+  "Refusing to start HTTP transport: MCP_S2S_SECRET is empty. " +
   "An empty secret would accept unauthenticated /mcp requests (CWE-306). " +
-  "Set CONDUIT_S2S_SECRET to the gateway-provisioned service-to-service secret, " +
+  "Set MCP_S2S_SECRET to the gateway-provisioned service-to-service secret, " +
   "set MCP_BEARER_TOKEN to a static bearer token (openssl rand -hex 32) for direct clients, " +
   "enable MCP_OAUTH_ENABLED=true, " +
   "or set MCP_ALLOW_INSECURE_DEV=1 to bypass this check for local development only.";
 
 export const PLACEHOLDER_S2S_SECRET_ERROR =
-  "Refusing to start HTTP transport: CONDUIT_S2S_SECRET is a known placeholder. " +
-  "Generate a secret with `openssl rand -hex 32` and set CONDUIT_S2S_SECRET to that value.";
+  "Refusing to start HTTP transport: MCP_S2S_SECRET is a known placeholder. " +
+  "Generate a secret with `openssl rand -hex 32` and set MCP_S2S_SECRET to that value.";
 
 export const PLACEHOLDER_BEARER_TOKEN_ERROR =
   "Refusing to start HTTP transport: MCP_BEARER_TOKEN is a known placeholder. " +
@@ -66,12 +66,12 @@ export const SHORT_BEARER_TOKEN_ERROR =
   "Generate a token with `openssl rand -hex 32` and set MCP_BEARER_TOKEN to that value.";
 
 export const GATEWAY_NEEDS_S2S_ERROR =
-  "Refusing to start HTTP transport: AUTH_MODE=gateway requires CONDUIT_S2S_SECRET. " +
+  "Refusing to start HTTP transport: AUTH_MODE=gateway requires MCP_S2S_SECRET. " +
   "Gateway mode takes ConnectWise credentials from request headers, so the caller must prove it is the gateway. " +
   "Use AUTH_MODE=env with MCP_BEARER_TOKEN for direct clients.";
 
 export const INSECURE_DEV_WARNING =
-  "SECURITY WARNING: CONDUIT_S2S_SECRET is empty and MCP_ALLOW_INSECURE_DEV=1. " +
+  "SECURITY WARNING: MCP_S2S_SECRET is empty and MCP_ALLOW_INSECURE_DEV=1. " +
   "HTTP /mcp is starting WITHOUT service-to-service authentication (and without a bearer token) and listens on 127.0.0.1 only. " +
   "Do not use MCP_ALLOW_INSECURE_DEV outside local development.";
 
@@ -95,7 +95,7 @@ export type HttpAuthResolution =
 
 /** The subset of the environment the resolver reads. */
 export interface HttpAuthEnv {
-  CONDUIT_S2S_SECRET?: string;
+  MCP_S2S_SECRET?: string;
   MCP_BEARER_TOKEN?: string;
   MCP_ALLOW_INSECURE_DEV?: string;
 }
@@ -108,7 +108,7 @@ export function resolveHttpAuthConfig(
   env: HttpAuthEnv,
   options: { oauthEnabled: boolean; gatewayMode: boolean },
 ): HttpAuthResolution {
-  const s2sSecret = (env.CONDUIT_S2S_SECRET ?? "").trim();
+  const s2sSecret = (env.MCP_S2S_SECRET ?? "").trim();
   const bearerToken = (env.MCP_BEARER_TOKEN ?? "").trim();
   const insecureDevRequested = env.MCP_ALLOW_INSECURE_DEV === "1";
 
