@@ -1,113 +1,111 @@
 # ConnectWise Manage MCP Server
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D20.18-brightgreen.svg)](https://nodejs.org/)
 [![CI](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/ecmsi/connectwise-manage-mcp/actions/workflows/ci.yml)
 
-> **ECMSI fork.** This is [ecmsi/connectwise-manage-mcp](https://github.com/ecmsi/connectwise-manage-mcp),
-> a hardened fork of [WYRE-AI/connectwise-manage-mcp](https://github.com/WYRE-AI/connectwise-manage-mcp)
-> for ECMSI's centralised MCP host. Compared with upstream it adds a standalone bearer-token
-> mechanism for direct clients, a read-only default (`CW_WRITE_MODE`), per-call audit logging, rate
-> limiting, redirect refusal in every mode, a clean production dependency tree and a deployment
-> layout for one Caddy fronting many MCP containers. The full list and the reasons are in
-> [docs/FORK-CHANGES.md](docs/FORK-CHANGES.md); the host procedure is in
-> [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). The rest of this README is upstream's, and still
-> accurate for tool behaviour.
->
-> Fork essentials:
->
-> | Variable | Fork behaviour |
-> |---|---|
-> | `MCP_BEARER_TOKEN` | Static token every direct client sends as `Authorization: Bearer`. Enough on its own to start HTTP; 32 characters minimum (`openssl rand -hex 32`). |
-> | `CW_WRITE_MODE` | `read-only` (default): the 63 get/search/list/test tools. `write`: all 89. |
-> | `MCP_RATE_LIMIT_PER_MINUTE` | Per-client cap on every path except `/health`. Default 120; 0 disables. |
-> | `MCP_TRUST_PROXY` | `1` behind Caddy so the limiter sees the real client address. |
-> | `CONDUIT_S2S_SECRET` | Only for the WYRE gateway. Not needed on the ECMSI host. |
->
-> Local gate: `npm run check` (lint, typecheck, build, tests, production audit).
+A [Model Context Protocol](https://modelcontextprotocol.io/) server for ConnectWise Manage (PSA),
+maintained by ECMSI. It gives Claude, or any MCP-compatible assistant, 89 tools over tickets, notes,
+time entries, schedule entries, companies, contacts, projects, configurations, agreements, invoices,
+opportunities, the product catalog and procurement, against cloud-hosted or self-hosted Manage.
 
-**Let your AI assistant work directly with ConnectWise Manage.** Search tickets, log time, look up companies and contacts, manage projects — through natural conversation instead of clicking through the CWM interface.
+It is built to run on a shared MCP host: one container per server, one TLS reverse proxy in front,
+clients connecting directly with a bearer token, and nothing registered that can change PSA data
+unless an operator turns it on.
 
-This is a [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that gives Claude (or any MCP-compatible AI) 86 tools covering the daily operations ConnectWise Manage shops depend on. Works with both **cloud-hosted and self-hosted** CWM instances — just point it at your server.
+**Origin.** This project was derived on 2026-11-24 from the
+[ConnectWise Manage MCP Server by WYRE Technology](https://github.com/WYRE-AI/connectwise-manage-mcp)
+(Apache-2.0) and has been maintained independently since. It is not affiliated with or endorsed by
+the original authors. [NOTICE](NOTICE) carries the attribution and [docs/ORIGIN.md](docs/ORIGIN.md)
+records what was changed at the point of divergence and why.
 
-> **Part of the [MSP Claude Plugins](https://github.com/wyre-technology/msp-claude-plugins) ecosystem** — a growing suite of AI integrations for the MSP stack including [Autotask](https://github.com/wyre-technology/autotask-mcp), [Datto RMM](https://github.com/wyre-technology/datto-rmm-mcp), [IT Glue](https://github.com/wyre-technology/itglue-mcp), [HaloPSA](https://github.com/wyre-technology/halopsa-mcp), [NinjaOne](https://github.com/wyre-technology/ninjaone-mcp), [Huntress](https://github.com/wyre-technology/huntress-mcp), and more. Built by MSPs, for MSPs.
+## What this project does differently
 
-## One-Click Deployment
+- **Direct-client authentication.** `MCP_BEARER_TOKEN` is a complete mechanism on its own:
+  constant-time compared, 32-character minimum, placeholder values refused. HTTP refuses to start with
+  no mechanism configured.
+- **Read-only by default.** `CW_WRITE_MODE=read-only` registers the 63 `get`/`search`/`list`/`test`
+  tools and nothing else. Write tools are not listed and cannot be called until `CW_WRITE_MODE=write`.
+- **Audit and abuse controls.** One log line per tool call (name, outcome, duration; never
+  arguments), per-client rate limiting, a health endpoint that discloses nothing, redirects refused on
+  every ConnectWise request.
+- **Clean dependency tree.** `npm audit` reports nothing, in production and in the full tree, and
+  CI enforces it.
+- **Deployment as code.** A hardened compose file, a site snippet for the host's Caddy, a systemd
+  unit, and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the shared-host layout.
 
-[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/WYRE-AI/connectwise-manage-mcp/tree/main)
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/WYRE-AI/connectwise-manage-mcp)
-
-> **Note on registry auth:** This server depends only on public npm packages, so the Cloudflare and DigitalOcean cloud builders install its dependencies anonymously — no token is required for one-click deploy. (If a future release adds a private `@wyre-ai/*` dependency, you would supply a GitHub PAT with `read:packages` as a build variable — `NODE_AUTH_TOKEN` for Cloudflare Workers, a build-time `GITHUB_TOKEN` secret for DigitalOcean.)
->
-> **Installing the published package:** The released package is published to the [GitHub Packages](https://github.com/WYRE-AI/connectwise-manage-mcp/pkgs/npm/connectwise-manage-mcp) npm registry, which requires authentication on every install (even for public packages). To install it, authenticate npm to `npm.pkg.github.com` with a GitHub PAT that has `read:packages`:
->
-> ```bash
-> export NODE_AUTH_TOKEN=$(gh auth token)
-> npm install @wyre-ai/connectwise-manage-mcp
-> ```
-
-For deploying to **Azure Container Apps** with Entra ID OAuth 2.1, see [AZURE_ACA_DEPLOYMENT.md](AZURE_ACA_DEPLOYMENT.md).
+Local gate: `npm run check` (lint, typecheck, build, tests, production audit). CI runs the same on
+Node 22 and 24 plus a container smoke test.
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CW_MANAGE_COMPANY_ID` | For stdio and `AUTH_MODE=env` | Your ConnectWise company identifier |
-| `CW_MANAGE_PUBLIC_KEY` | For stdio and `AUTH_MODE=env` | API member public key |
-| `CW_MANAGE_PRIVATE_KEY` | For stdio and `AUTH_MODE=env` | API member private key |
-| `CW_MANAGE_CLIENT_ID` | For stdio and `AUTH_MODE=env` | Client ID from [ConnectWise Developer Portal](https://developer.connectwise.com/) |
-| `CW_MANAGE_URL` | No | API base URL (see below) |
-| `CW_MANAGE_REJECT_UNAUTHORIZED` | No | Set to `false` for self-signed certs (default: `true`) |
+| `CW_MANAGE_COMPANY_ID` | Yes | Your ConnectWise company identifier |
+| `CW_MANAGE_PUBLIC_KEY` | Yes | API member public key |
+| `CW_MANAGE_PRIVATE_KEY` | Yes | API member private key |
+| `CW_MANAGE_CLIENT_ID` | Yes | Client ID from the [ConnectWise Developer Portal](https://developer.connectwise.com/) |
+| `CW_MANAGE_URL` | No | API base URL (see below). Must be the canonical origin; redirects are refused. |
+| `CW_MANAGE_REJECT_UNAUTHORIZED` | No | `false` disables TLS verification for ConnectWise requests and logs a security warning. For a private CA, leave it unset and use `NODE_EXTRA_CA_CERTS` instead. |
+| `CW_WRITE_MODE` | No | `read-only` (default): 63 read tools. `write`: all 89 tools. Any other value refuses to start. |
 | `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
-| `MCP_HTTP_PORT` | No | HTTP port (default: `8080`) |
-| `MCP_HTTP_HOST` | No | Bind address when `MCP_TRANSPORT=http`. Defaults to `127.0.0.1`. A configured `CONDUIT_S2S_SECRET` honors this value. The container image sets `0.0.0.0`. |
-| `CONDUIT_S2S_SECRET` | Yes for HTTP | Service-to-service secret. The HTTP server logs an error and exits non-zero when this is empty or a known placeholder (`changeme`, `secret`, `your-s2s-secret`, `replace-me`, and similar). Compose will not start when it is unset. Never commit a real value. Leave it empty in `.env.example`. |
-| `MCP_ALLOW_INSECURE_DEV` | No | Set to `1` only for local development to start HTTP without `CONDUIT_S2S_SECRET`. The process logs a warning, does not enforce `X-Gateway-S2S`, and listens on `127.0.0.1` only (a wider `MCP_HTTP_HOST` is overridden). A placeholder secret is still refused. |
-| `AUTH_MODE` | No | `env` (default) or `gateway`. Gateway mode requires `X-CW-Company-Id`, `X-CW-Public-Key`, `X-CW-Private-Key`, and `X-CW-Client-Id` on each `/mcp` request. `env` uses `CW_MANAGE_*` after S2S auth succeeds. |
+| `MCP_HTTP_PORT` | No | HTTP port (default `8080`) |
+| `MCP_HTTP_HOST` | No | Bind address for HTTP (default `127.0.0.1`). Honored only when an authentication mechanism is configured. |
+| `MCP_BEARER_TOKEN` | One of these for HTTP | Static bearer token every direct client sends as `Authorization: Bearer <token>`. At least 32 characters; `openssl rand -hex 32`. |
+| `MCP_S2S_SECRET` | One of these for HTTP | HMAC secret for `X-Gateway-S2S`, when a signing gateway or proxy sits in front of the server. Required for `AUTH_MODE=gateway`. |
+| `MCP_OAUTH_ENABLED` | One of these for HTTP | `true` turns on Entra ID OAuth 2.1 (see [entra-app-registration.md](entra-app-registration.md)). `MCP_BEARER_TOKEN` is then the static fallback inside that flow. |
+| `MCP_ALLOW_INSECURE_DEV` | No | `1` starts HTTP with no authentication, bound to `127.0.0.1` only. Local development. |
+| `MCP_RATE_LIMIT_PER_MINUTE` | No | Requests per minute per client address on every path except `/health`. Default `120`; `0` disables. |
+| `MCP_TRUST_PROXY` | No | `1` when a reverse proxy sets `X-Forwarded-For`, so the rate limiter sees the real client. |
+| `AUTH_MODE` | No | `env` (default): ConnectWise credentials from `CW_MANAGE_*`. `gateway`: credentials arrive per request on `X-CW-*` headers; needs `MCP_S2S_SECRET`. |
+| `LOG_LEVEL` | No | `info` by default |
 
-`/health` stays unauthenticated and does not read ConnectWise credentials. The stdio transport does not use `CONDUIT_S2S_SECRET`.
+Every configured HTTP mechanism is enforced on `/mcp`. `/health` and `/healthz` stay
+unauthenticated, read no credentials, and return only `{"status":"ok"}`. The stdio transport uses
+none of the HTTP settings.
 
 ### HTTP authentication
 
-With `MCP_TRANSPORT=http` and `CONDUIT_S2S_SECRET` set, every `/mcp` request must include `X-Gateway-S2S`. The header value is:
+**Bearer token** (the ECMSI host). Every `/mcp` request carries `Authorization: Bearer <MCP_BEARER_TOKEN>`.
+A missing or wrong token answers `401` with a `WWW-Authenticate` header, and the failure is logged
+with the client address.
+
+**Signed gateway header.** With `MCP_S2S_SECRET` set, every `/mcp` request must include
+`X-Gateway-S2S`:
 
 ```text
-t=<unix seconds>,v1=<hex hmac-sha256>
+X-Gateway-S2S: t=<unix seconds>,v1=<hex hmac-sha256("t=<unix seconds>")>
 ```
 
-`v1` is HMAC-SHA256 (hex, lowercase) of the ASCII string `t=<unix seconds>`, keyed with `CONDUIT_S2S_SECRET`. The timestamp must be within 300 seconds of the server clock. A missing or invalid header returns 401. The process never writes the secret to logs.
+`v1` is HMAC-SHA256 (hex, lowercase) of the ASCII string `t=<unix seconds>`, keyed with
+`MCP_S2S_SECRET`. The timestamp must be within 300 seconds of the server clock. In
+`AUTH_MODE=gateway`, `/mcp` also requires `X-CW-Company-Id`, `X-CW-Public-Key`, `X-CW-Private-Key`
+and `X-CW-Client-Id` (`X-CW-Url` optional and validated against private address space).
 
-```text
-X-Gateway-S2S: t=1710000000,v1=<hmac-sha256("t=1710000000")>
-```
+**Entra ID OAuth** (`MCP_OAUTH_ENABLED=true`) serves the discovery routes and validates Entra JWTs on
+`/mcp`.
 
-In `AUTH_MODE=gateway`, `/mcp` also requires `X-CW-Company-Id`, `X-CW-Public-Key`, `X-CW-Private-Key`, and `X-CW-Client-Id` (`X-CW-URL` is optional). Those headers are the credential source for that request. A request missing any required header returns 401.
+### API base URL (`CW_MANAGE_URL`)
 
-Entra OAuth discovery routes stay available when `MCP_OAUTH_ENABLED=true`. `POST /mcp` still requires a valid `X-Gateway-S2S` header when the secret is set.
-
-### API Base URL (`CW_MANAGE_URL`)
-
-| Instance Type | URL |
+| Instance type | URL |
 |---------------|-----|
 | Cloud (North America) | `https://api-na.myconnectwise.net` (default) |
 | Cloud (Europe) | `https://api-eu.myconnectwise.net` |
 | Cloud (Australia) | `https://api-au.myconnectwise.net` |
-| **Self-hosted** | `https://cwm.yourcompany.com` |
+| Self-hosted | `https://cwm.yourcompany.com` |
 
-For self-hosted instances, set `CW_MANAGE_URL` to your server's base URL. The server automatically appends `/v4_6_release/apis/3.0` unless the URL already contains that path.
+For a self-hosted instance set `CW_MANAGE_URL` to the server's canonical base URL. The server
+appends `/v4_6_release/apis/3.0` unless the URL already contains that path.
 
-If your self-hosted instance uses a self-signed certificate, also set `CW_MANAGE_REJECT_UNAUTHORIZED=false`.
+### Getting your API keys
 
-### Getting Your API Keys
-
-1. Log in to your ConnectWise Manage instance
-2. Navigate to **System > Members > API Members**
-3. Create a new API member with appropriate permissions
-4. Generate API keys for the member
-5. Get your Client ID from the [ConnectWise Developer Portal](https://developer.connectwise.com/)
+1. Log in to ConnectWise Manage.
+2. Go to **System > Members > API Members** and create a member dedicated to this server, with the
+   narrowest security role that covers the tools you will use.
+3. Generate API keys for that member.
+4. Get a Client ID from the [ConnectWise Developer Portal](https://developer.connectwise.com/).
 
 ## Available Tools
 
@@ -269,7 +267,7 @@ Two limits of the ConnectWise API are worth knowing before using these. There is
   - If every attempt fails after the entry was created, the result is **not** an error, because the entry exists and must not be created again (an error result invites a retry, which would log the time twice). The first content item is a `WARNING` that the time entry WAS created, with its id, followed by one line per ticket flag left off. The entry JSON comes next. The last item is a JSON status block: `timeEntryCreated: true`, `timeEntryId`, `autoEmailRestoreFailed: true`, `ticketId`, `flagsLeftOff`, `restoreAttempts` and `restoreWith`. Until the flags are turned back on (`cw_update_ticket`, or `PATCH /project/tickets/{id}` for a project ticket), ConnectWise does not auto-email those recipients for that ticket.
   - The server also writes one error-level JSON line to stderr (`"event":"cw_time_entry_auto_email_restore_failed"`) with the ticket id and path, `flagsLeftOff`, `timeEntryCreated`, `timeEntryId`, the attempt count, the connection identity (API base URL + company id) and the sanitized ConnectWise error (status and reference id). It never contains keys or credentials.
   - If the create itself fails and the restore also fails, the result is an error that says creation failed or could not be confirmed (the POST may have reached ConnectWise before the error, so check ConnectWise for the entry before retrying) and names the flags left off, and the same log line is written with `timeEntryCreated: false` (meaning the create was not confirmed). The same retry and log apply when turning the flags off fails partway and they have to be put back.
-  - Concurrent `cw_create_time_entry` calls on the same ticket are queued one at a time (read, toggle, post, restore), keyed by the ConnectWise connection (API base URL + company id) and the ticket. **This lock is in-process only:** it covers parallel calls within one stdio server, one Node HTTP server, or one Worker isolate. It does not coordinate across replicas, separate Worker isolates, or other tools and people editing the same ticket, so a create from elsewhere during the window can still be emailed. Creates on different tickets still run in parallel. **Run the HTTP server as a single replica** (for example Azure Container Apps `minReplicas = maxReplicas = 1`, as Conduit's sidecar is deployed) when concurrent creates on one ticket are possible. With more than one replica, or on Cloudflare Workers where requests can land in different isolates, two creates on the same ticket can interleave, so one entry can be posted after the other has turned the flags back on (that recipient is emailed), or one can read the other's "off" state as the original and leave the flags off.
+  - Concurrent `cw_create_time_entry` calls on the same ticket are queued one at a time (read, toggle, post, restore), keyed by the ConnectWise connection (API base URL + company id) and the ticket. **This lock is in-process only:** it covers parallel calls within one stdio server, one Node HTTP server, or one Worker isolate. It does not coordinate across replicas, separate Worker isolates, or other tools and people editing the same ticket, so a create from elsewhere during the window can still be emailed. Creates on different tickets still run in parallel. **Run the HTTP server as a single replica** when concurrent creates on one ticket are possible. With more than one replica, or on Cloudflare Workers where requests can land in different isolates, two creates on the same ticket can interleave, so one entry can be posted after the other has turned the flags back on (that recipient is emailed), or one can read the other's "off" state as the original and leave the flags off.
   - During that brief window, other entries logged on the same ticket also miss auto-email. The ticket PATCH also updates the ticket's `lastUpdated`, and that can fire ticket-update workflow rules.
   - Pass `suppressTicketAutoEmail: false` to skip the toggle and keep ConnectWise's default behaviour. Entries charged to a charge code or an activity never touch a ticket.
 - **Notes.** A ticket note emails only when `processNotifications` is true on the note **and** the matching ticket Automatic Email flag is on. `cw_add_ticket_note` sets `processNotifications` when you pass `emailContactFlag`, `emailResourceFlag`, or `emailCcFlag` as true, unless you set `processNotifications` yourself. Those flag names are never posted on the note itself.
@@ -277,127 +275,100 @@ Two limits of the ConnectWise API are worth knowing before using these. There is
 
 ## Usage
 
-### With Claude Desktop
+### Hosted (HTTP) with Claude Code
 
-Add to your `claude_desktop_config.json`:
+```bash
+claude mcp add --transport http connectwise https://cw-mcp.example.com/mcp \
+  --header "Authorization: Bearer <MCP_BEARER_TOKEN>"
+```
+
+Or in `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "connectwise-manage": {
-      "command": "npx",
-      "args": ["@wyre-ai/connectwise-manage-mcp"],
-      "env": {
-        "CW_MANAGE_COMPANY_ID": "your-company-id",
-        "CW_MANAGE_PUBLIC_KEY": "your-public-key",
-        "CW_MANAGE_PRIVATE_KEY": "your-private-key",
-        "CW_MANAGE_CLIENT_ID": "your-client-id"
-      }
+    "connectwise": {
+      "type": "http",
+      "url": "https://cw-mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer <MCP_BEARER_TOKEN>" }
     }
   }
 }
 ```
 
-For a self-hosted instance:
+### Local (stdio) with Claude Desktop or Claude Code
+
+Build once (`npm ci && npm run build`), then point the client at the checkout. Claude Desktop's
+`claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "connectwise-manage": {
-      "command": "npx",
-      "args": ["@wyre-ai/connectwise-manage-mcp"],
+      "command": "node",
+      "args": ["/absolute/path/to/connectwise-manage-mcp/dist/index.js"],
       "env": {
-        "CW_MANAGE_URL": "https://cwm.yourcompany.com",
         "CW_MANAGE_COMPANY_ID": "your-company-id",
         "CW_MANAGE_PUBLIC_KEY": "your-public-key",
         "CW_MANAGE_PRIVATE_KEY": "your-private-key",
         "CW_MANAGE_CLIENT_ID": "your-client-id",
-        "CW_MANAGE_REJECT_UNAUTHORIZED": "false"
+        "CW_WRITE_MODE": "read-only"
       }
     }
   }
 }
 ```
 
+For a self-hosted instance add `"CW_MANAGE_URL": "https://cwm.yourcompany.com"`, and for a private
+CA add `"NODE_EXTRA_CA_CERTS": "/path/to/ca-bundle.pem"` rather than turning verification off.
+Keeping credentials out of the client file is better still: `node --env-file=/path/to/.env
+.../dist/index.js` reads them from a file only you can open.
+
 ### With Docker
 
-The checked-in Compose service is gateway mode. It does not set `CW_MANAGE_*` and does not use `env_file`, so a project `.env` cannot inject static vendor credentials into the container. Compose still interpolates `CONDUIT_S2S_SECRET` and `LOG_LEVEL` from that file. The image listens on `0.0.0.0` inside the container; the published port is loopback.
+`docker-compose.yml` is the shared-host shape: credentials and the bearer token from a `.env`
+beside it, published on `127.0.0.1:3101`, read-only root filesystem, no capabilities, memory cap,
+`MCP_TRUST_PROXY=1` for the reverse proxy in front.
 
 ```bash
-CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" docker compose up -d
+cp .env.example .env && chmod 600 .env   # fill in CW_MANAGE_* and MCP_BEARER_TOKEN
+docker compose build
+docker compose up -d
+curl -s http://127.0.0.1:3101/health     # {"status":"ok"}
 ```
 
-Generate the secret with `openssl rand -hex 32`. Compose refuses to start when `CONDUIT_S2S_SECRET` is unset. Every `/mcp` request must carry `X-Gateway-S2S` (see [HTTP authentication](#http-authentication)) plus the `X-CW-*` credential headers.
-
-Single-tenant HTTP (`AUTH_MODE=env`) still requires the S2S secret, then uses `CW_MANAGE_*`:
-
-```bash
-docker run \
-  -e CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" \
-  -e AUTH_MODE=env \
-  -e CW_MANAGE_COMPANY_ID=your-company-id \
-  -e CW_MANAGE_PUBLIC_KEY=your-public-key \
-  -e CW_MANAGE_PRIVATE_KEY=your-private-key \
-  -e CW_MANAGE_CLIENT_ID=your-client-id \
-  -p 127.0.0.1:8080:8080 \
-  ghcr.io/wyre-ai/connectwise-manage-mcp:latest
-```
-
-`docker-compose.caddy.yml` is that single-tenant shape behind Caddy. It still requires `CONDUIT_S2S_SECRET`.
-
-### HTTP Transport (Gateway Mode)
-
-Run with HTTP transport for multi-tenant gateway deployments. The process exits until `CONDUIT_S2S_SECRET` is set:
-
-```bash
-CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" MCP_TRANSPORT=http AUTH_MODE=gateway node dist/index.js
-```
-
-Each `/mcp` request needs a valid `X-Gateway-S2S` header plus `X-CW-Company-Id`, `X-CW-Public-Key`, `X-CW-Private-Key`, and `X-CW-Client-Id` (`X-CW-URL` is optional).
-
-Local HTTP without a secret is development-only. It binds `127.0.0.1` and logs a warning:
-
-```bash
-MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
-```
+The container refuses to start until `MCP_BEARER_TOKEN` (or another mechanism) is set, so the
+listener is never reachable unauthenticated. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers the
+rest: the Caddy site, client setup, operation, updates and troubleshooting.
 
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run in development (stdio)
-npm run dev
-
-# HTTP refuses to start until CONDUIT_S2S_SECRET is set
-CONDUIT_S2S_SECRET="$CONDUIT_S2S_SECRET" MCP_TRANSPORT=http npm start
-
-# Local HTTP only, without a service-to-service secret (always binds 127.0.0.1)
-MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
-
-# Type check
+npm ci              # install
+npm run build       # compile to dist/
+npm run dev         # tsc --watch
+npm run build:ui    # rebuild the embedded ticket card (only when ui/ changes)
+npm run lint
 npm run typecheck
-
-# Run tests
 npm test
+npm run check       # everything CI runs, including the production audit
+```
+
+Local HTTP without a token, loopback only:
+
+```bash
+MCP_TRANSPORT=http MCP_ALLOW_INSECURE_DEV=1 npm start
 ```
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+See [CONTRIBUTING.md](CONTRIBUTING.md). Run `npm run check` before opening a pull request.
 
 ## License
 
-Apache-2.0
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
----
-
-Built by [WYRE Technology](https://github.com/wyre-technology) — part of the [MSP Claude Plugins](https://github.com/wyre-technology/msp-claude-plugins) ecosystem
+This project is derived from the ConnectWise Manage MCP Server by WYRE Technology
+([WYRE-AI/connectwise-manage-mcp](https://github.com/WYRE-AI/connectwise-manage-mcp), Apache-2.0),
+which in turn credits community contributions from Tekscape and Cloudwize Technologies for the
+procurement and agreement-recap tools. ECMSI maintains this version independently.

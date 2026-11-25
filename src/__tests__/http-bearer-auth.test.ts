@@ -15,7 +15,7 @@ const TOKEN = "f3a9c17e4b2d8f6a0c5e1d9b7a3f2e8c4d6b0a1f9e8d7c6b5a4f3e2d1c0b9a8f"
 const S2S_SECRET = "s2s-do-not-log-7f3a9c";
 
 const ENV_KEYS = [
-  "CONDUIT_S2S_SECRET",
+  "MCP_S2S_SECRET",
   "MCP_BEARER_TOKEN",
   "MCP_ALLOW_INSECURE_DEV",
   "MCP_HTTP_PORT",
@@ -47,7 +47,7 @@ function restoreEnv(): void {
 }
 
 function useBearerEnv(): void {
-  delete process.env.CONDUIT_S2S_SECRET;
+  delete process.env.MCP_S2S_SECRET;
   delete process.env.MCP_ALLOW_INSECURE_DEV;
   delete process.env.MCP_OAUTH_ENABLED;
   delete process.env.MCP_TRUST_PROXY;
@@ -173,7 +173,7 @@ describe("bearer token startup", () => {
     const logs = captureStderr();
     installExitSpy();
     await expect(startHttpTransport()).rejects.toThrow("process.exit:1");
-    expect(logs.text()).toContain("AUTH_MODE=gateway requires CONDUIT_S2S_SECRET");
+    expect(logs.text()).toContain("AUTH_MODE=gateway requires MCP_S2S_SECRET");
   });
 
   it("refuses a bad CW_WRITE_MODE and a bad rate limit before listening", async () => {
@@ -241,7 +241,7 @@ describe("bearer token on /mcp", () => {
 
   it("requires both proofs when S2S and bearer are both configured", async () => {
     useBearerEnv();
-    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    process.env.MCP_S2S_SECRET = S2S_SECRET;
     captureStderr();
     const { port } = await listen();
 

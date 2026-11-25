@@ -1,24 +1,20 @@
 /**
- * Verifies the conduit gateway's service-to-service auth header
- * (gateway#377 parity — closes the confused-deputy gap where a compromised
- * sibling sidecar in the shared ACA environment could otherwise impersonate
- * the gateway to this container).
+ * Verifies the service-to-service header a signing gateway or proxy puts on
+ * each request: `X-Gateway-S2S: t=<unix seconds>,v1=<hex hmac-sha256>`, where
+ * `v1` is HMAC-SHA256 of the ASCII string `t=<unix seconds>` keyed with the
+ * shared secret. A proof is good for 300 seconds either side of the server
+ * clock, so a captured header cannot be replayed later.
  *
- * This is a near-verbatim port of conduit's `verifyS2sHeader`
- * (src/proxy/s2s.ts) — intentionally unchanged logic, ported once and kept
- * in sync. `secret` is treated as an opaque value: since gateway#377
- * Finding B, the gateway derives a per-vendor subkey from its master
- * secret and this container is provisioned (via CONDUIT_S2S_SECRET) with
- * only its own derived value, never the raw master — a sibling sidecar
- * holds a DIFFERENT derived value and cannot forge a header that verifies
- * here. This function doesn't need to know that; it just checks whatever
- * secret it's handed.
+ * `secret` is opaque: a gateway may derive a per-backend subkey from a master
+ * secret and give this server only its own value, so a sibling backend
+ * holding a different subkey cannot forge a header that verifies here. This
+ * function does not need to know that; it checks whatever secret it is handed.
  *
- * Empty secret => always returns false. HTTP startup refuses to listen when
- * CONDUIT_S2S_SECRET is empty or a known placeholder, unless
- * MCP_ALLOW_INSECURE_DEV=1 (empty secret only), in which case the caller
- * skips this check, logs a warning, and binds 127.0.0.1. Do not treat an
- * empty secret as a production "enforcement disabled" switch.
+ * Empty secret => always returns false. HTTP startup refuses to listen when no
+ * authentication mechanism is configured (see http-auth.ts); the only
+ * exception is MCP_ALLOW_INSECURE_DEV=1, where the caller skips this check,
+ * logs a warning and binds 127.0.0.1. Do not treat an empty secret as a
+ * production "enforcement disabled" switch.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 

@@ -1,5 +1,5 @@
 /**
- * WYREAI-434: cw_update_contact JSON Patch and cw_update_contact_types
+ * Cw_update_contact JSON Patch and cw_update_contact_types
  * (Decision Maker and other contact-type associations).
  */
 

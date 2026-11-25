@@ -1,10 +1,7 @@
 {
-  "name": "@wyre-ai/connectwise-manage-mcp",
+  "name": "@ecmsi/connectwise-manage-mcp",
   "version": "1.4.0-ecmsi.1",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
-  },
-  "description": "ConnectWise Manage (PSA) MCP server for Claude",
+  "description": "ConnectWise Manage (PSA) MCP server for Claude, maintained by ECMSI",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,7 +37,7 @@
     "psa",
     "msp"
   ],
-  "author": "Wyre Technology",
+  "author": "ECMSI",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/ecmsi/connectwise-manage-mcp/issues"
@@ -54,13 +51,9 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@modelcontextprotocol/ext-apps": "^2.0.3",
-    "@semantic-release/changelog": "^7.0.0",
-    "@semantic-release/git": "^11.0.1",
-    "@semantic-release/github": "^12.0.10",
     "@types/node": "^26.6.4",
     "eslint": "^10.11.0",
     "globals": "^17.13.0",
-    "semantic-release": "^25.0.9",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vite": "^8.3.2",

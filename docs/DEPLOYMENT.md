@@ -183,9 +183,10 @@ cd .. && sudo docker compose build && sudo docker compose up -d
 curl -s http://127.0.0.1:3101/health
 ```
 
-Rolling back is the same procedure with the previous tag. Treat every upstream merge as a new
-review: re-check `src/index.ts`, `src/http-auth.ts`, `src/tool-policy.ts`, `src/api-client.ts` and
-any new `fetch` call or environment variable.
+Rolling back is the same procedure with the previous tag. If code is ever pulled in from the
+original project this one was derived from, treat it as a new review: re-check `src/index.ts`,
+`src/http-auth.ts`, `src/tool-policy.ts`, `src/api-client.ts` and any new `fetch` call or
+environment variable.
 
 ## Write mode
 

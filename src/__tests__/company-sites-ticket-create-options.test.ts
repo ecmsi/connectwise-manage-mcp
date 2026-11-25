@@ -1,5 +1,5 @@
 /**
- * WYREAI-705: onboarding and ticket-creation depth.
+ * Onboarding and ticket-creation depth.
  * cw_list_company_sites, siteId on cw_create_contact, and the siteId /
  * ownerId / automaticEmail* opt-ins on cw_create_ticket.
  */
@@ -56,7 +56,7 @@ function stubFetch(handler: (url: string, init?: { method?: string }) => unknown
 const posts = (m: ReturnType<typeof stubFetch>) =>
   (m.mock.calls as unknown as FetchCall[]).filter(([, init]) => init?.method === "POST");
 
-describe("WYREAI-705", () => {
+describe("company sites and ticket-create options", () => {
   beforeEach(() => vi.unstubAllGlobals());
   afterEach(() => vi.unstubAllGlobals());
 

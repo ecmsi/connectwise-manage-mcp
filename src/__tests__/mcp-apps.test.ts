@@ -121,9 +121,8 @@ describe("MCP Apps ticket card", () => {
     });
 
     it("serves neutral defaults with no vendor identity", () => {
-      expect(TICKET_CARD_HTML).not.toMatch(/WYRE/i);
-      expect(TICKET_CARD_HTML).not.toContain("00c9db"); // WYRE cyan
-      expect(TICKET_CARD_HTML).not.toContain("ede947"); // WYRE yellow
+      expect(TICKET_CARD_HTML).not.toMatch(/<img\b/); // no logo until a brand is injected
+      expect(TICKET_CARD_HTML).toContain("--brand-primary:#2563eb"); // neutral default palette
       expect(TICKET_CARD_HTML).not.toContain("fonts.googleapis.com"); // no external fetches
       // Exactly one injection marker for serve-time branding.
       expect(TICKET_CARD_HTML.match(/BRAND_INJECT/g)).toHaveLength(1);

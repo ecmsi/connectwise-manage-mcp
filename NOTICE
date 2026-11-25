@@ -1,0 +1,15 @@
+ECMSI ConnectWise Manage MCP Server
+Copyright 2026 ECMSI
+
+This product is derived from the ConnectWise Manage MCP Server
+(https://github.com/WYRE-AI/connectwise-manage-mcp), Copyright WYRE Technology,
+licensed under the Apache License, Version 2.0 (see LICENSE). The code was
+taken at upstream commit bb2a9077612b84d535af3cffe1ce97ad0128202d on
+2026-11-24 and has been modified; this project is maintained independently
+and is not affiliated with or endorsed by WYRE Technology.
+
+That work in turn credits:
+  - Tekscape-finance/connectwise-manage-mcp (procurement, purchase-order and
+    sales-order tools), Apache-2.0.
+  - Cloudwize-Technologies/connectwise-manage-mcp (agreement-recap tools),
+    Apache-2.0.

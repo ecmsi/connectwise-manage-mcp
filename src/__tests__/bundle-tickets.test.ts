@@ -38,7 +38,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("cw_bundle_tickets (WYREAI-575)", () => {
+describe("cw_bundle_tickets", () => {
   it("is annotated as a destructive write", async () => {
     const result = (await rpc("tools/list", {})) as {
       tools: { name: string; annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean } }[];
