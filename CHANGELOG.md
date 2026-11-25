@@ -3,6 +3,31 @@
 Versions from 2.0.0 on are this project's own. The one earlier tag, `v1.4.0-ecmsi.1`, carried the
 original project's version number and is superseded.
 
+## [2.2.0] - 2026-11-25
+
+### Added
+
+- **Published container image.** A `release.yml` workflow runs on every `vX.Y.Z` tag: it checks the
+  tag against the version in the tree, runs the full gate, builds `ghcr.io/ecmsi/connectwise-manage-mcp`
+  for linux/amd64 and linux/arm64 with provenance attestation and SBOM, and creates the GitHub Release
+  with the image digest and the npm tarball (`npm install -g` gives the `connectwise-manage-mcp`
+  command). Releases are no longer created by hand.
+- **Image-based deployment.** `docker-compose.yml` pins the published image instead of building from
+  a checkout; `docs/DEPLOYMENT.md` installs from `compose.yml` and `.env` alone, pulls the image, and
+  updates by moving the tag. Building from source remains a one-line alternative.
+- `scripts/check-permissions.mjs` ships inside the image, so the API member's role is verified with
+  `docker compose run --rm connectwise-mcp node scripts/check-permissions.mjs` and no checkout.
+- `npm run version:check` (part of `npm run check`) fails when `package.json`, `package-lock.json`,
+  the server metadata and the compose image tag disagree, or when the release tag does not match.
+
+### Changed
+
+- The Dockerfile compiles on the build machine's own architecture and installs runtime dependencies
+  natively per target, so cross-platform builds do not emulate the compiler and the image never
+  carries dev tools. OCI labels carry the version and commit the release workflow supplies.
+- CI runs on `main` and pull requests only (the hardening branch is gone), uses the current action
+  majors, and proves the permission check script loads from inside the built image.
+
 ## [2.1.0] - 2026-11-25
 
 ### Added

@@ -135,12 +135,16 @@ Fill the four values into `/opt/mcp/connectwise/.env` and start the container
    renamed row. Pass `writeMode: "write"` to check a member meant for the write-mode server, or
    `includeRows: true` to see every row the member has.
 
-The same check runs on the host without a client, against the compiled code:
+The same check runs on the host without a client, from the script shipped inside the image and the
+`.env` compose already loads:
 
 ```bash
-cd /opt/mcp/connectwise/src && sudo node --env-file=../.env scripts/check-permissions.mjs
+cd /opt/mcp/connectwise && sudo docker compose run --rm connectwise-mcp node scripts/check-permissions.mjs
 # add --mode write for the write-mode member, --rows to print every permission row
 ```
+
+From a source checkout it is `node --env-file=/path/to/.env scripts/check-permissions.mjs` after
+`npm run build`.
 
 It exits 1 while any gap remains. Grant what it names on the role, save, and run it again; no restart
 is needed, the role change applies to the member's next request.

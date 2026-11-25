@@ -29,6 +29,20 @@ npm run typecheck   # Type-check without emitting
    - `chore:` for maintenance tasks
 4. Open a pull request against the `main` branch
 
+## Releasing (maintainers)
+
+A release is a tag; the `release.yml` workflow does the rest.
+
+1. On a branch, set the new version in `package.json`, `package-lock.json` (both entries),
+   `src/mcp-server.ts` and the image tag in `docker-compose.yml`; `npm run version:check` lists any
+   you missed. Pin the same version in `README.md` and `docs/DEPLOYMENT.md`, and date the
+   `CHANGELOG.md` entry.
+2. Open the pull request, let CI pass, merge it.
+3. On the merge commit: `git tag -s vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`.
+4. The workflow re-runs the gate on the tag, publishes `ghcr.io/ecmsi/connectwise-manage-mcp:X.Y.Z`
+   for linux/amd64 and linux/arm64, and creates the GitHub Release with the image digest and the
+   npm tarball. Do not create the release by hand; if the workflow fails, fix the cause and re-run it.
+
 ## Reporting Issues
 
 - Use GitHub Issues

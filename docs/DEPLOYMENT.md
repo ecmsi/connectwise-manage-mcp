@@ -39,8 +39,20 @@ Caddy is the only thing that listens on the network. Adding a server never touch
   `env_file`. They never go in a client config, a compose file, a Caddy file or a shell history.
 - **The container speaks plain HTTP on loopback.** Caddy terminates TLS. Never publish a container
   port on `0.0.0.0`.
-- **Pin what you deploy.** Check out a tag (`v2.1.0`), build from it, and record the commit.
+- **Pin what you deploy.** Use the exact image tag (`2.2.0`) or its digest from the release notes,
+  and record which one is running. `latest` is for trying things out.
 - **One replica per server.** Rate limits and the time-entry lock are in process memory.
+
+## What a release contains
+
+Each [GitHub Release](https://github.com/ecmsi/connectwise-manage-mcp/releases) is produced by the
+`release.yml` workflow when a version tag is pushed, after the full gate passes on the tagged commit:
+
+| Asset | Use |
+|---|---|
+| `ghcr.io/ecmsi/connectwise-manage-mcp:<version>` | Linux AMD64 and ARM64 container image, with provenance attestation and SBOM. The release notes record its immutable digest. `<major>.<minor>`, `<major>` and `latest` tags float. |
+| `ecmsi-connectwise-manage-mcp-<version>.tgz` | The npm package: compiled runtime only, plus a shrinkwrap so `npm install` reproduces the dependency tree the release was tested with. For the no-Docker install. |
+| `ecmsi-connectwise-manage-mcp-<version>.tgz.sha256` | Checksum for the tarball. |
 
 ## Prerequisites
 
@@ -48,19 +60,21 @@ Caddy is the only thing that listens on the network. Adding a server never touch
 - Caddy 2 installed from the Caddy apt repository and running as a service
   (`/etc/caddy/Caddyfile` imports `/etc/caddy/sites/*.caddy`; see `deploy/caddy/Caddyfile.example`).
 - A DNS record for the server's hostname pointing at the VM, and outbound HTTPS from the VM to the
-  ConnectWise API region and to GitHub.
+  ConnectWise API region, to `ghcr.io` and to `raw.githubusercontent.com`.
 
 ## Install
 
+The directory holds only the compose file and `.env`; the image comes from the registry.
+
 ```bash
 sudo mkdir -p /opt/mcp/connectwise && cd /opt/mcp/connectwise
-sudo git clone --branch v2.1.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
-sudo cp src/docker-compose.yml compose.yml
-sudo cp src/.env.example .env
+sudo curl -fsSLo compose.yml https://raw.githubusercontent.com/ecmsi/connectwise-manage-mcp/v2.2.0/docker-compose.yml
+sudo curl -fsSLo .env https://raw.githubusercontent.com/ecmsi/connectwise-manage-mcp/v2.2.0/.env.example
 sudo chmod 600 .env
 ```
 
-Edit `compose.yml` so `build.context` is `./src` (the checkout) and leave the rest. Edit `.env`:
+`compose.yml` already names `ghcr.io/ecmsi/connectwise-manage-mcp:2.2.0`; to pin by digest, replace
+the tag with `@sha256:<digest from the release notes>`. Edit `.env`:
 
 ```
 CW_MANAGE_COMPANY_ID=<company id>
@@ -75,10 +89,18 @@ MCP_BEARER_TOKEN=<output of: openssl rand -hex 32>
 Then:
 
 ```bash
-sudo docker compose build
+sudo docker compose pull
 sudo docker compose up -d
 sudo docker compose ps            # "healthy" within about 30 seconds
 curl -s http://127.0.0.1:3101/health
+```
+
+The image is public, so the pull needs no registry login. To run from a source checkout instead,
+clone the tag and build the same image name locally before `up`:
+
+```bash
+sudo git clone --branch v2.2.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
+sudo docker build --target production -t ghcr.io/ecmsi/connectwise-manage-mcp:2.2.0 src
 ```
 
 The last command prints `{"status":"ok"}`. The container's own log shows the mode it started in:
@@ -152,11 +174,14 @@ is configured. After a container recreate, clients reconnect on their own: the s
 Then run `cw_test_connection` once from a client; it reads `/system/info` and proves the API member
 and client id work. Follow it with `cw_get_my_permissions`, which reads the member's effective
 security permissions and lists every module and function the tools need that is not granted at
-All. The same check runs without a client:
+All. The same check runs without a client, from the script shipped inside the image, using the
+`.env` compose already loads:
 
 ```bash
-cd /opt/mcp/connectwise/src && sudo node --env-file=../.env scripts/check-permissions.mjs
+cd /opt/mcp/connectwise && sudo docker compose run --rm connectwise-mcp node scripts/check-permissions.mjs
 ```
+
+It exits 1 when a required level is not All, and `--mode write` checks the write tool set.
 
 ## Operate
 
@@ -180,16 +205,16 @@ every client. Rotate the API keys in ConnectWise the same way (the API member's 
 
 ## Update
 
+Read the release notes and the changelog for the new version first, then move the pin:
+
 ```bash
-cd /opt/mcp/connectwise/src
-sudo git fetch --tags
-sudo git diff v2.1.0 v2.1.1 --stat     # read the diff before moving the pin
-sudo git checkout v2.1.1
-cd .. && sudo docker compose build && sudo docker compose up -d
+cd /opt/mcp/connectwise
+sudo sed -i 's/connectwise-manage-mcp:2.2.0/connectwise-manage-mcp:2.2.1/' compose.yml
+sudo docker compose pull && sudo docker compose up -d
 curl -s http://127.0.0.1:3101/health
 ```
 
-Rolling back is the same procedure with the previous tag. If code is ever pulled in from the
+Rolling back is the same procedure with the previous tag or digest. If code is ever pulled in from the
 original project this one was derived from, treat it as a new review: re-check `src/index.ts`,
 `src/http-auth.ts`, `src/tool-policy.ts`, `src/api-client.ts` and any new `fetch` call or
 environment variable.
@@ -216,7 +241,7 @@ For a host where Docker is not wanted, run the checkout under systemd with the u
 ```bash
 sudo useradd --system --home /opt/connectwise-mcp --shell /usr/sbin/nologin connectwise-mcp
 sudo mkdir -p /opt/connectwise-mcp && cd /opt/connectwise-mcp
-sudo git clone --branch v2.1.0 https://github.com/ecmsi/connectwise-manage-mcp.git app
+sudo git clone --branch v2.2.0 https://github.com/ecmsi/connectwise-manage-mcp.git app
 cd app && sudo npm ci --ignore-scripts && sudo npm run build && sudo npm prune --omit=dev
 sudo cp .env.example ../.env && sudo chmod 600 ../.env
 sudo chown -R connectwise-mcp:connectwise-mcp /opt/connectwise-mcp
@@ -227,10 +252,16 @@ sudo systemctl daemon-reload && sudo systemctl enable --now connectwise-mcp
 In that `.env`, also set `MCP_TRANSPORT=http`, `MCP_HTTP_HOST=127.0.0.1`, `MCP_HTTP_PORT=3101` and
 `MCP_TRUST_PROXY=1`. Node.js 22 or newer must be installed. The Caddy snippet is unchanged.
 
+The release tarball is the alternative to building: `npm install -g ecmsi-connectwise-manage-mcp-2.2.0.tgz`
+(verify it against the `.sha256` asset first) installs the `connectwise-manage-mcp` command with the
+exact dependency tree the release was tested with. Point the unit's `ExecStart` at that command instead
+of `dist/index.js`.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `docker compose pull` says `denied` or `manifest unknown` | Tag typo, or no outbound HTTPS to `ghcr.io` | Compare the tag with the releases page; the image is public and needs no login |
 | Container exits at once, log says `Refusing to start HTTP transport` | `MCP_BEARER_TOKEN` empty, shorter than 32 characters, or a placeholder | Generate one with `openssl rand -hex 32`, then `docker compose up -d` |
 | Log says `CW_WRITE_MODE must be "read-only" or "write"` | Typo in `.env` | Fix the value; the server refuses to guess |
 | `401` from every client call | Token mismatch, or the client sends it as something other than `Authorization: Bearer` | Compare the client header with `.env`; auth failures are logged with the client address |
