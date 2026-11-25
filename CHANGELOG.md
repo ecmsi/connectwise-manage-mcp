@@ -3,7 +3,7 @@
 Versions from 2.0.0 on are this project's own. The one earlier tag, `v1.4.0-ecmsi.1`, carried the
 original project's version number and is superseded.
 
-## [Unreleased]
+## [2.1.0] - 2026-11-25
 
 ### Added
 
