@@ -37,7 +37,7 @@ On the host, after a ConnectWise API member exists ([how to set one up](docs/API
 
 ```bash
 sudo mkdir -p /opt/mcp/connectwise && cd /opt/mcp/connectwise
-sudo git clone --branch v2.0.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
+sudo git clone --branch v2.1.0 https://github.com/ecmsi/connectwise-manage-mcp.git src
 sudo cp src/docker-compose.yml compose.yml && sudo cp src/.env.example .env && sudo chmod 600 .env
 # edit .env: CW_MANAGE_* from the API member, MCP_BEARER_TOKEN from `openssl rand -hex 32`
 sudo docker compose build && sudo docker compose up -d
