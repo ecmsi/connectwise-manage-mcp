@@ -3,6 +3,32 @@
 Versions from 2.0.0 on are this project's own. The one earlier tag, `v1.4.0-ecmsi.1`, carried the
 original project's version number and is superseded.
 
+## [Unreleased]
+
+### Added
+
+- **Permission matrix as code.** `src/permission-matrix.ts` declares the ConnectWise security-role
+  module, function and level every tool needs. `docs/PERMISSION-MATRIX.md` is generated from it
+  (`npm run docs:matrix`) and a test fails when it is stale.
+- **`cw_get_my_permissions`** reads the API member's effective permissions from
+  `GET /system/mySecurity` and reports every required level that is not granted at All, with the
+  tools it blocks and the Table Setup tables the role must allow. `scripts/check-permissions.mjs`
+  (`npm run check:permissions`) does the same from the command line with `node --env-file`. The tool
+  needs no permission itself. Read-only mode now registers 64 of 90 tools.
+- **Contract test against ConnectWise's published API.** `test/fixtures/connectwise-openapi-2026.11-paths.json`
+  is the path and method index of "Connectwise Manage Public Endpoints" 2026.11 (1,874 paths, 3,132
+  operations). A test resolves every endpoint the tools call and fails if one is not in the document.
+- `docs/API-MEMBER-SETUP.md` walks through the security role, API member, key pair and Client ID and
+  ends with the live verification; `docs/images/` holds the setup-flow and architecture diagrams.
+
+### Changed
+
+- Permission hints on refused calls now name the exact Security Roles rows for opportunities
+  (Sales > Opportunity, Closed Opportunity, Opportunity Finance), sales orders, schedule entries
+  (Service Desk > Resource Scheduling), invoices (Finance > Invoicing), members (System > Member
+  Maintenance) and the setup tables behind priorities, communication types, contact types, schedule
+  types and statuses, and sales stages.
+
 ## [2.0.0] - 2026-11-25
 
 ### Changed

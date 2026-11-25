@@ -39,7 +39,7 @@
   <text x="620" y="213" text-anchor="middle" font-family="ui-monospace, Consolas, monospace" font-size="12" fill="#374151">127.0.0.1:3101 → :8080</text>
   <text x="620" y="233" text-anchor="middle" font-size="12">bearer check · rate limit · audit log</text>
   <text x="620" y="251" text-anchor="middle" font-size="12">CW_WRITE_MODE=read-only</text>
-  <text x="620" y="269" text-anchor="middle" font-size="12">63 of 89 tools registered</text>
+  <text x="620" y="269" text-anchor="middle" font-size="12">64 of 90 tools registered</text>
   <text x="620" y="287" text-anchor="middle" font-size="12" fill="#374151">read-only root fs, no caps, .env (600)</text>
 
   <rect x="520" y="310" width="200" height="25" rx="6" fill="#f9fafb" stroke="#d1d5db" stroke-width="1.5" stroke-dasharray="4 3"/>

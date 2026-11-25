@@ -23,7 +23,9 @@
     "pack:mcpb": "node scripts/pack-mcpb.js",
     "validate:mcpb": "mcpb validate manifest.json",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
-    "check": "npm run lint && npm run typecheck && npm run build && npm test && npm run audit:prod"
+    "check": "npm run lint && npm run typecheck && npm run build && npm test && npm run audit:prod",
+    "docs:matrix": "node scripts/generate-permission-matrix.mjs",
+    "check:permissions": "node scripts/check-permissions.mjs"
   },
   "repository": {
     "type": "git",

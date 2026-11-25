@@ -62,3 +62,6 @@ wrangler.json
 
 # Deployment files (not needed inside the image)
 deploy
+
+# Test fixtures
+test
