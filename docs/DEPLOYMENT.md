@@ -150,7 +150,13 @@ is configured. After a container recreate, clients reconnect on their own: the s
 (no session ids), so there is no stale-session case.
 
 Then run `cw_test_connection` once from a client; it reads `/system/info` and proves the API member
-and client id work.
+and client id work. Follow it with `cw_get_my_permissions`, which reads the member's effective
+security permissions and lists every module and function the tools need that is not granted at
+All. The same check runs without a client:
+
+```bash
+cd /opt/mcp/connectwise/src && sudo node --env-file=../.env scripts/check-permissions.mjs
+```
 
 ## Operate
 
@@ -190,7 +196,7 @@ environment variable.
 
 ## Write mode
 
-Read-only leaves 63 tools: every `cw_get_*`, `cw_search_*`, `cw_list_*` and `cw_test_connection`.
+Read-only leaves 64 tools: every `cw_get_*`, `cw_search_*`, `cw_list_*` and `cw_test_connection`.
 Write mode adds 26 tools that create, update or delete tickets, notes, time entries, schedule
 entries, contacts, companies, projects, activities, catalog items, agreement additions, invoices and
 inventory adjustments.

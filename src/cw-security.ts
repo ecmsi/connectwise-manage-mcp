@@ -87,6 +87,23 @@ const RULES: Rule[] = [
   { pattern: /^\/company\/contacts\b/i, requirement: { module: "Companies", permission: "Contacts" } },
   { pattern: /^\/company\/companies\b/i, requirement: { module: "Companies", permission: "Company Maintenance" } },
   { pattern: /^\/time\/entries\b/i, requirement: { module: "Time & Expense", permission: "Time Entry" } },
+  // Rows confirmed against integration vendors' published matrices (see docs/PERMISSION-MATRIX.md)
+  { pattern: /^\/sales\/opportunities\/[^/]+\/forecast\b/i, requirement: { module: "Sales", permission: "Opportunity Finance (Inquire), plus Opportunity" } },
+  {
+    pattern: /^\/sales\/opportunities\b/i,
+    requirement: { module: "Sales", permission: "Opportunity", note: "Closed opportunities also need Sales > Closed Opportunity." },
+  },
+  { pattern: /^\/sales\/orders\b/i, requirement: { module: "Sales", permission: "Sales Orders" } },
+  { pattern: /^\/sales\/stages\b/i, requirement: TABLE_SETUP("Sales / Sales Stage") },
+  { pattern: /^\/schedule\/entries\b/i, requirement: { module: "Service Desk", permission: "Resource Scheduling" } },
+  { pattern: /^\/schedule\/(types|statuses)\b/i, requirement: TABLE_SETUP("Schedule / Schedule Type and Schedule Status") },
+  { pattern: /^\/finance\/invoices\b/i, requirement: { module: "Finance", permission: "Invoicing" } },
+  { pattern: /^\/finance\/agreementrecap\b/i, requirement: { module: "Finance", permission: "Agreements" } },
+  { pattern: /^\/system\/members\b/i, requirement: { module: "System", permission: "Member Maintenance" } },
+  { pattern: /^\/service\/priorities\b/i, requirement: TABLE_SETUP("Service / Priority") },
+  { pattern: /^\/service\/boards\b/i, requirement: { module: "Service Desk", permission: "Service Tickets", note: "Some tenants also need System > Table Setup with the Service / Service Board table allowed." } },
+  { pattern: /^\/company\/communicationTypes\b/i, requirement: TABLE_SETUP("Company / Communication Type") },
+  { pattern: /^\/company\/contacts\/types\b/i, requirement: TABLE_SETUP("Company / Contact Type") },
 ];
 
 /** The security role permission an API path needs, or undefined when this server does not know it. */

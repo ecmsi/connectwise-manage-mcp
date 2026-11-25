@@ -203,7 +203,7 @@ export function createMcpServer(
   registerActivityTools(server, client);
   registerCatalogTools(server, client);
   registerProcurementTools(server, client);
-  registerHealthTools(server, client);
+  registerHealthTools(server, client, server.writeMode);
   registerAgreementTools(server, client);
   registerOpportunityTools(server, client);
   registerFinanceProcurementTools(server, client);

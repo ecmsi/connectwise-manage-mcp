@@ -30,8 +30,8 @@ const config = {
 };
 
 /** The catalog as counted by the source scan below. Change deliberately. */
-const EXPECTED_TOTAL_TOOLS = 89;
-const EXPECTED_READ_TOOLS = 63;
+const EXPECTED_TOTAL_TOOLS = 90;
+const EXPECTED_READ_TOOLS = 64;
 
 async function listToolNames(writeMode: "read-only" | "write", audit?: (e: ToolAuditEntry) => void) {
   const server = createMcpServer(config, { writeMode, audit: audit ?? null });
@@ -217,6 +217,7 @@ describe("tool sources agree with the classification", () => {
     const indirect = reads.filter((r) => r.methods.length === 0).map((r) => r.name).sort();
     expect(indirect).toEqual([
       "cw_get_inventory_on_hand",
+      "cw_get_my_permissions",
       "cw_get_project_product_status",
       "cw_get_project_purchase_order_lines",
     ]);

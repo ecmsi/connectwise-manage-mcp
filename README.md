@@ -10,7 +10,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/ecmsi/connectwise-manage-mcp/main)](https://github.com/ecmsi/connectwise-manage-mcp/commits/main)
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server for ConnectWise Manage (PSA),
-maintained by ECMSI. It gives Claude, or any MCP-compatible assistant, 89 tools over tickets, notes,
+maintained by ECMSI. It gives Claude, or any MCP-compatible assistant, 90 tools over tickets, notes,
 time entries, schedule entries, companies, contacts, projects, configurations, agreements, invoices,
 opportunities, the product catalog and procurement, against cloud-hosted or self-hosted Manage.
 
@@ -60,8 +60,11 @@ That starts the stdio transport; see [Usage](#usage) for the Claude Desktop and 
 ## Security model
 
 - **The API member is the ceiling.** The server can read what its ConnectWise security role lets
-  it read, and nothing more. Use a dedicated member with a role built for this server.
-- **Read-only by default.** `CW_WRITE_MODE=read-only` registers the 63 `get`/`search`/`list`/`test`
+  it read, and nothing more. Use a dedicated member with a role built from
+  [the permission matrix](docs/PERMISSION-MATRIX.md), then run `cw_get_my_permissions` (or
+  `npm run check:permissions`) to compare the member's effective permissions with what the tools
+  need.
+- **Read-only by default.** `CW_WRITE_MODE=read-only` registers the 64 `get`/`search`/`list`/`test`
   tools and nothing else. Write tools are not listed and cannot be called until an operator sets
   `CW_WRITE_MODE=write`. A test scans every tool's source and fails if a read-named tool ever
   issues anything but GET. This matters because ticket text is written by customers and reaches the
@@ -83,7 +86,8 @@ That starts the stdio transport; see [Usage](#usage) for the Claude Desktop and 
 
 | Document | What it covers |
 |---|---|
-| [docs/API-MEMBER-SETUP.md](docs/API-MEMBER-SETUP.md) | Creating the ConnectWise security role, API member, key pair and Client ID, with the permission each tool needs |
+| [docs/API-MEMBER-SETUP.md](docs/API-MEMBER-SETUP.md) | Creating the ConnectWise security role, API member, key pair and Client ID, and verifying the role from the tenant |
+| [docs/PERMISSION-MATRIX.md](docs/PERMISSION-MATRIX.md) | Generated from the source: the role recipe (module, function, levels) for read-only and write mode, and what every tool needs. Every endpoint is checked against ConnectWise's published OpenAPI document |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | The shared-host layout, install, Caddy, clients, operation, updates, troubleshooting |
 | [deploy/](deploy/) | Caddy site snippet and systemd unit |
 | [entra-app-registration.md](entra-app-registration.md) | Entra ID app registration, only if you enable OAuth |
@@ -107,7 +111,7 @@ the original authors; [NOTICE](NOTICE) carries the attribution.
 | `CW_MANAGE_CLIENT_ID` | Yes | Client ID from the [ConnectWise Developer Portal](https://developer.connectwise.com/) |
 | `CW_MANAGE_URL` | No | API base URL (see below). Must be the canonical origin; redirects are refused. |
 | `CW_MANAGE_REJECT_UNAUTHORIZED` | No | `false` disables TLS verification for ConnectWise requests and logs a security warning. For a private CA, leave it unset and use `NODE_EXTRA_CA_CERTS` instead. |
-| `CW_WRITE_MODE` | No | `read-only` (default): 63 read tools. `write`: all 89 tools. Any other value refuses to start. |
+| `CW_WRITE_MODE` | No | `read-only` (default): 64 read tools. `write`: all 90 tools. Any other value refuses to start. |
 | `MCP_TRANSPORT` | No | `stdio` (default) or `http` |
 | `MCP_HTTP_PORT` | No | HTTP port (default `8080`) |
 | `MCP_HTTP_HOST` | No | Bind address for HTTP (default `127.0.0.1`). Honored only when an authentication mechanism is configured. |
