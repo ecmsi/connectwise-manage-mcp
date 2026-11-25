@@ -133,7 +133,7 @@ export function createMcpServer(
   const server = new PolicyMcpServer(
     {
       name: "connectwise-manage-mcp",
-      version: "1.4.0-ecmsi.1",
+      version: "2.0.0",
     },
     {
       capabilities: {

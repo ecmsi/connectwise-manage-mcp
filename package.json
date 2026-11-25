@@ -1,6 +1,6 @@
 {
   "name": "@ecmsi/connectwise-manage-mcp",
-  "version": "1.4.0-ecmsi.1",
+  "version": "2.0.0",
   "description": "ConnectWise Manage (PSA) MCP server for Claude, maintained by ECMSI",
   "type": "module",
   "main": "dist/index.js",

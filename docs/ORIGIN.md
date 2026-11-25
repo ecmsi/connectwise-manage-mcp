@@ -3,8 +3,8 @@
 This project began on 2026-11-24 as a copy of the
 [ConnectWise Manage MCP Server by WYRE Technology](https://github.com/WYRE-AI/connectwise-manage-mcp)
 at commit `bb2a9077612b84d535af3cffe1ce97ad0128202d`, taken under the Apache License 2.0. From
-that point it has been maintained by ECMSI as an independent project: its own versioning, its own CI,
-its own deployment layout, and no tracking of the original repository. It is not affiliated with or
+that point it has been maintained by ECMSI as an independent project: its own versioning (from
+2.0.0), its own CI, its own deployment layout, and no tracking of the original repository. It is not affiliated with or
 endorsed by the original authors; the attribution the license requires is in [NOTICE](../NOTICE).
 
 The original was written around a hosted gateway product that signed every request with an HMAC

@@ -1,13 +1,17 @@
 # Changelog
 
-## [Unreleased]
+Versions from 2.0.0 on are this project's own. The one earlier tag, `v1.4.0-ecmsi.1`, carried the
+original project's version number and is superseded.
+
+## [2.0.0] - 2026-11-25
 
 ### Changed
 
-- **Independent project.** This server is now maintained by ECMSI on its own, decoupled from the
-  project it was derived from. The package is `@ecmsi/connectwise-manage-mcp`; author, repository
-  and bundle metadata point at ECMSI; a `NOTICE` file carries the attribution the Apache-2.0 license
-  requires; `docs/ORIGIN.md` records the point of divergence.
+- **Independent project, own versioning.** This server is now maintained by ECMSI on its own,
+  decoupled from the project it was derived from, and numbered from 2.0.0. The package is
+  `@ecmsi/connectwise-manage-mcp`; author, repository and bundle metadata point at ECMSI; a `NOTICE`
+  file carries the attribution the Apache-2.0 license requires; `docs/ORIGIN.md` records the point
+  of divergence.
 - **`CONDUIT_S2S_SECRET` is now `MCP_S2S_SECRET`.** Same semantics: HMAC secret for the
   `X-Gateway-S2S` header, placeholder values refused, required for `AUTH_MODE=gateway`. Anyone
   using the signed-gateway mechanism must rename the variable.
@@ -19,9 +23,10 @@
 - Tests that were named after the original project's issue tracker are renamed after what they test.
 - Dependabot and CODEOWNERS rewritten for this repository.
 
-## [1.4.0-ecmsi.1] - 2026-11-24
+## [1.4.0-ecmsi.1] - 2026-11-24 (superseded by 2.0.0)
 
-First ECMSI release, based on the original project at commit `bb2a907`. See
+First ECMSI release, based on the original project at commit `bb2a907`. Still used the original
+project's version number and the `CONDUIT_S2S_SECRET` name; deploy 2.0.0 instead. See
 [docs/ORIGIN.md](docs/ORIGIN.md) for the reasoning behind each item and
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the shared-host layout.
 
